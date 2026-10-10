@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Simulador BoscoAgro IoT</title>
+  <meta name="description" content="Simulación animada e interactiva del prototipo de riego automático del equipo BoscoAgro IoT (Olimpiadas STEM+ Bolivia 2026).">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 28V14' stroke='%233f9a4a' stroke-width='3'/%3E%3Cpath d='M16 16C8 16 5 10 5 5c7 0 11 4 11 11zM16 13c0-6 4-9 11-9 0 6-4 9-11 9z' fill='%233f9a4a'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Olimpiadas STEM+ · Equipo BoscoAgro IoT</div>
+      <h1>Así funciona el <span>riego automático</span></h1>
+      <p class="sub">Simulación del prototipo: el sensor mide, la placa decide, el relé enciende la bomba y el dashboard muestra los datos. Toca cualquier pieza para verla de cerca.</p>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <div class="steps" id="steps">
+        <div class="step" data-s="1"><b>1 · Arranque</b><small>¿Qué lo pone en marcha?</small></div>
+        <div class="step" data-s="2"><b>2 · Medir</b><small>¿Qué hace al iniciar?</small></div>
+        <div class="step" data-s="3"><b>3 · Decidir</b><small>¿Qué pasa paso a paso?</small></div>
+        <div class="step" data-s="4"><b>4 · Regar</b><small>¿Qué pasa al terminar?</small></div>
+        <div class="step" data-s="5"><b>5 · Reportar</b><small>¿Cómo saben que funciona?</small></div>
+      </div>
+
+      <div class="narr" id="narr" aria-live="polite">
+        <span class="chip" id="narrChip">07:00</span>
+        <p id="narrText">Se enchufa la fuente de 5 V. La placa ESP32 se enciende, prepara el pin del relé y se conecta al Wi-Fi.</p>
+      </div>
+
+      <div class="scene-box">
+        <svg id="scene" viewBox="0 0 1000 560" role="img" aria-label="Esquema animado del sistema de riego">
+          <defs>
+            <clipPath id="tankClip"><path d="M641 364 L651 499 L849 499 L859 364 Z"/></clipPath>
+            <linearGradient id="wood" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#b9824d"/><stop offset="1" stop-color="#94643a"/></linearGradient>
+          </defs>
+          <g id="art">
+            <!-- mesa -->
+            <rect x="0" y="505" width="1000" height="55" fill="#8a7a66" opacity=".25"/>
+            <line x1="0" y1="505" x2="1000" y2="505" stroke="var(--muted)" stroke-width="1.5"/>
+            <ellipse id="puddle" cx="600" cy="507" rx="0" ry="5" fill="var(--water)" opacity=".45"/>
+
+            <!-- cables (detrás) -->
+            <path id="w-data" d="M303 262 C 303 200, 380 205, 430 205" fill="none" stroke="#e0b100" stroke-width="3.5"/>
+            <path d="M298 262 C 296 190, 380 195, 430 192" fill="none" stroke="#d23b2f" stroke-width="3"/>
+            <path d="M308 262 C 310 214, 380 218, 430 218" fill="none" stroke="var(--wire-gnd)" stroke-width="3"/>
+            <path id="w-ctrl" d="M610 195 L 660 195" fill="none" stroke="#e0b100" stroke-width="3.5"/>
+            <path d="M610 208 L 660 208" fill="none" stroke="var(--wire-gnd)" stroke-width="3"/>
+            <path d="M495 330 L495 240" fill="none" stroke="var(--wire-gnd)" stroke-width="5"/>
+            <path id="w-pow" d="M535 350 C 640 350, 760 310, 748 226" fill="none" stroke="#d23b2f" stroke-width="3"/>
+            <path id="w-pump" d="M752 222 C 812 262, 800 360, 762 455" fill="none" stroke="#d23b2f" stroke-width="3"/>
+            <path id="w-net" d="M603 146 C 660 70, 740 70, 805 100" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="3 7" opacity=".55"/>
+
+            <!-- PLANTA Y SUELO -->
+            <g class="comp" id="c-planta" data-id="planta" tabindex="0" role="button" aria-label="Planta y suelo">
+              <rect x="50" y="300" width="320" height="200" rx="4" fill="url(#wood)"/>
+              <g stroke="#7a5230" stroke-width="2" opacity=".6"><line x1="50" y1="366" x2="370" y2="366"/><line x1="50" y1="433" x2="370" y2="433"/></g>
+              <rect id="soil" x="62" y="312" width="296" height="180" fill="#8b6a42"/>
+              <ellipse id="wet" cx="236" cy="320" rx="46" ry="9" fill="#2a1a10" opacity="0"/>
+              <path id="stem" d="M180 314 C 176 272, 188 240, 182 196" fill="none" stroke="#3d7d3a" stroke-width="5" stroke-linecap="round"/>
+              <g id="leaves"></g>
+              <text class="label" x="62" y="528">Planta y suelo</text>
+            </g>
+
+            <!-- SENSOR -->
+            <g class="comp" id="c-sensor" data-id="sensor" tabindex="0" role="button" aria-label="Sensor de humedad">
+              <path d="M290 258 h26 v168 l-13 18 l-13 -18 Z" fill="#1d2a3f"/>
+              <rect x="294" y="266" width="18" height="22" rx="2" fill="#3a4c6b"/>
+              <rect x="298" y="270" width="10" height="8" fill="#151515"/>
+              <line x1="290" y1="312" x2="316" y2="312" stroke="#fff" stroke-width="1.5" stroke-dasharray="3 2"/>
+              <rect x="290" y="313" width="26" height="135" fill="#8b6a42" opacity=".72" id="sensorCover"/>
+              <text class="label" x="246" y="234">Sensor de humedad</text>
+            </g>
+
+            <!-- PLACA ESP32 -->
+            <g class="comp" id="c-placa" data-id="placa" tabindex="0" role="button" aria-label="Placa ESP32">
+              <rect x="430" y="150" width="180" height="90" rx="6" fill="#16323a"/>
+              <g fill="#c9a640">
+                <rect x="440" y="152" width="150" height="5"/><rect x="440" y="233" width="150" height="5"/>
+              </g>
+              <rect x="515" y="168" width="62" height="48" rx="3" fill="#b8bfc4"/>
+              <rect x="521" y="174" width="50" height="36" rx="2" fill="#9aa2a8"/>
+              <path d="M584 162 h22 v6 h-16 v6 h16 v6 h-16 v6 h16" fill="none" stroke="#c9a640" stroke-width="2"/>
+              <rect x="440" y="182" width="26" height="18" rx="2" fill="#3a3f44"/>
+              <circle id="led-board" cx="478" cy="172" r="5" fill="#2b4b30"/>
+              <text x="478" y="222" font-family="JetBrains Mono, monospace" font-size="11" fill="#cfe" text-anchor="middle">ESP32</text>
+              <text class="label" x="430" y="138">Placa ESP32 · cerebro</text>
+            </g>
+
+            <!-- WIFI -->
+            <g id="wifi" transform="translate(603 140)">
+              <g id="wifi-waves" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round">
+                <path d="M-8 -6 A 10 10 0 0 1 8 -6"/><path d="M-14 -12 A 18 18 0 0 1 14 -12"/><path d="M-20 -18 A 26 26 0 0 1 20 -18"/>
+              </g>
+              <g id="wifi-x" stroke="var(--alert)" stroke-width="3.5" stroke-linecap="round" opacity="0"><line x1="-12" y1="-24" x2="12" y2="0"/><line x1="12" y1="-24" x2="-12" y2="0"/></g>
+            </g>
+
+            <!-- RELÉ -->
+            <g class="comp" id="c-rele" data-id="rele" tabindex="0" role="button" aria-label="Módulo relé">
+              <rect x="660" y="165" width="95" height="62" rx="4" fill="#1f5fa6"/>
+              <rect x="684" y="172" width="44" height="40" rx="3" fill="#2c7fd6"/>
+              <text x="706" y="196" font-family="JetBrains Mono, monospace" font-size="8" fill="#e8f2ff" text-anchor="middle">5V RELAY</text>
+              <line id="rele-lever" x1="694" y1="206" x2="716" y2="200" stroke="#e8f2ff" stroke-width="2.5" stroke-linecap="round"/>
+              <rect x="733" y="176" width="18" height="34" rx="2" fill="#2f9a55"/>
+              <circle id="led-rele" cx="671" cy="216" r="4.5" fill="#4a1d1d"/>
+              <text class="label" x="660" y="155">Relé</text>
+            </g>
+
+            <!-- FUENTE -->
+            <g class="comp" id="c-fuente" data-id="fuente" tabindex="0" role="button" aria-label="Fuente de 5 voltios">
+              <rect x="455" y="330" width="80" height="52" rx="8" fill="#e9ecea" stroke="#9aa39e"/>
+              <rect x="443" y="342" width="12" height="6" fill="#9aa39e"/><rect x="443" y="362" width="12" height="6" fill="#9aa39e"/>
+              <text x="495" y="361" font-family="JetBrains Mono, monospace" font-size="12" fill="#333" text-anchor="middle">5V 2A</text>
+              <text class="label" x="455" y="402">Fuente 5 V</text>
+            </g>
+
+            <!-- MANGUERA Y GOTERO -->
+            <g class="comp" id="c-manguera" data-id="manguera" tabindex="0" role="button" aria-label="Manguera y gotero">
+              <path id="hose" d="M770 437 C 772 340, 640 300, 560 292 S 300 272, 240 286 L 236 300" fill="none" stroke="#bcd9e4" stroke-width="10" stroke-linecap="round" opacity=".85"/>
+              <path id="hose-flow" d="M770 437 C 772 340, 640 300, 560 292 S 300 272, 240 286 L 236 300" fill="none" stroke="var(--water)" stroke-width="4" stroke-dasharray="10 14" stroke-linecap="round" opacity="0"/>
+              <path d="M230 296 h12 l-3 10 h-6 Z" fill="#2f6f9a"/>
+              <circle id="drop1" cx="236" cy="306" r="3.2" fill="var(--water)" opacity="0"/>
+              <circle id="drop2" cx="236" cy="306" r="3.2" fill="var(--water)" opacity="0"/>
+              <circle id="leak1" cx="600" cy="292" r="3.2" fill="var(--water)" opacity="0"/>
+              <circle id="leak2" cx="600" cy="292" r="3.2" fill="var(--water)" opacity="0"/>
+              <text class="label" x="580" y="275">Manguera</text>
+              <text class="label-s" x="226" y="290" text-anchor="end" id="goteroLbl">gotero</text>
+            </g>
+
+            <!-- DEPÓSITO -->
+            <g class="comp" id="c-deposito" data-id="deposito" tabindex="0" role="button" aria-label="Depósito de agua">
+              <path d="M640 362 L650 500 L850 500 L860 362" fill="var(--water-soft)" fill-opacity=".35" stroke="var(--muted)" stroke-width="2.5"/>
+              <g clip-path="url(#tankClip)">
+                <rect id="water" x="636" y="400" width="230" height="110" fill="var(--water)" opacity=".5"/>
+              </g>
+              <text class="label" x="866" y="420">Depósito</text>
+              <text class="label-s" x="866" y="437" id="tankLbl">1200 ml</text>
+            </g>
+
+            <!-- BOMBA -->
+            <g class="comp" id="c-bomba" data-id="bomba" tabindex="0" role="button" aria-label="Minibomba sumergible">
+              <rect x="712" y="455" width="66" height="40" rx="9" fill="#3b4246"/>
+              <rect x="764" y="434" width="12" height="24" rx="3" fill="#3b4246"/>
+              <g id="impeller" transform="translate(737 475)">
+                <circle r="13" fill="#596267"/>
+                <g stroke="#cfd6d9" stroke-width="3" stroke-linecap="round"><line x1="-9" y1="0" x2="9" y2="0"/><line x1="0" y1="-9" x2="0" y2="9"/></g>
+              </g>
+              <text class="label" x="690" y="530">Minibomba 5 V</text>
+            </g>
+
+            <!-- DASHBOARD -->
+            <g class="comp" id="c-dashboard" data-id="dashboard" tabindex="0" role="button" aria-label="Dashboard">
+              <rect x="805" y="40" width="180" height="120" rx="7" fill="#0f1b1f" stroke="#55646a" stroke-width="2"/>
+              <path d="M790 160 L1000 160 L986 172 L804 172 Z" fill="#77868b"/>
+              <text x="815" y="58" font-family="JetBrains Mono, monospace" font-size="10" fill="#8fd9c4">Huerto · Cajón 1</text>
+              <text id="dash-val" x="815" y="84" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="20" fill="#ffffff">--</text>
+              <text id="dash-status" x="975" y="82" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#8fd9c4" text-anchor="end">en línea</text>
+              <line x1="815" y1="130" x2="975" y2="130" stroke="#e2a64a" stroke-width="1" stroke-dasharray="3 3" opacity=".8"/>
+              <line x1="815" y1="114" x2="975" y2="114" stroke="#5eaeea" stroke-width="1" stroke-dasharray="3 3" opacity=".8"/>
+              <polyline id="dash-line" points="" fill="none" stroke="#5fd0b0" stroke-width="2"/>
+              <circle id="dash-dot" r="3" fill="#5fd0b0" cx="-10" cy="-10"/>
+              <text class="label" x="805" y="28">Dashboard (Wi-Fi)</text>
+            </g>
+
+            <!-- señal en movimiento -->
+            <circle id="dot" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" opacity="0"/>
+          </g>
+        </svg>
+        <div class="hint">Toca o haz clic en una pieza para ampliarla. Los cables amarillos llevan señales; los rojos, energía.</div>
+      </div>
+
+      <div class="panel">
+        <div class="controls">
+          <button class="primary" id="btnPlay">Pausar</button>
+          <button id="btnStep" class="toggle-on" aria-pressed="false" title="Se detiene en cada etapa">Paso a paso</button>
+          <button id="btnNext" disabled>Siguiente paso →</button>
+          <span class="sep"></span>
+          <div class="seg" role="group" aria-label="Velocidad">
+            <button data-sp="0.5">0,5×</button><button data-sp="1" class="on">1×</button><button data-sp="2">2×</button><button data-sp="4">4×</button>
+          </div>
+          <button id="btnReset">Reiniciar</button>
+        </div>
+        <h2 style="margin-top:16px">Pon a prueba el sistema</h2>
+        <div class="tests">
+          <button id="tDry">☀ Secar la tierra</button>
+          <button id="tHand">Regar a mano</button>
+          <button id="tWifi" aria-pressed="false">Cortar Wi-Fi</button>
+          <button id="tSensor" aria-pressed="false">Desconectar sensor</button>
+          <button id="tTank" aria-pressed="false">Vaciar depósito</button>
+          <button id="tHose" aria-pressed="false">Soltar manguera</button>
+        </div>
+        <p class="note">Cada falla muestra por qué el código necesita una protección. Los números (umbral 35 %, 3 s de riego, 75 ml por pulso) son de ejemplo: los reales salen de calibrar el sensor y medir la bomba.</p>
+      </div>
+
+      <div class="panel">
+        <h2>El programa que corre en la placa</h2>
+        <pre class="code" id="code" aria-label="Código del programa"></pre>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <div class="eyebrow">Lectura en vivo</div>
+        <div class="big"><span class="v" id="rHum">26 %</span><span class="pill" id="rState">Seca</span></div>
+        <div class="meter" aria-hidden="true">
+          <span class="mark" style="left:35%"></span><span class="mark" style="left:50%"></span>
+          <span class="needle" id="needle" style="left:26%"></span>
+          <span class="tick" style="left:0%;transform:none">0</span>
+          <span class="tick" style="left:35%">35 riega</span>
+          <span class="tick" style="left:50%">50 para</span>
+          <span class="tick" style="left:100%;transform:translateX(-100%)">100</span>
+        </div>
+        <dl class="kv">
+          <dt>Valor crudo del sensor</dt><dd id="rRaw">2558</dd>
+          <dt>Bomba</dt><dd id="rPump">Apagada</dd>
+          <dt>Modo riego</dt><dd id="rMode">No</dd>
+          <dt>Pulsos en este ciclo</dt><dd id="rPulses">0</dd>
+          <dt>Agua usada</dt><dd id="rUsed">0 ml</dd>
+          <dt>Wi-Fi</dt><dd id="rWifi">Conectado</dd>
+          <dt>Hora simulada</dt><dd id="rClock">07:00</dd>
+        </dl>
+        <div style="margin-top:10px"><span class="eyebrow">Depósito</span><div class="tank"><i id="rTank" style="width:80%"></i></div></div>
+      </div>
+
+      <div class="panel detail" id="detail">
+        <div class="eyebrow">Pieza ampliada</div>
+        <svg class="zoom" id="zoom" viewBox="0 0 400 300" aria-hidden="true"><use href="#art"/></svg>
+        <h3 id="dName">Sensor de humedad capacitivo</h3>
+        <p class="role" id="dRole"></p>
+        <h4>Qué es</h4><p id="dWhat"></p>
+        <h4>Qué hace en el prototipo</h4><p id="dDoes"></p>
+        <h4>Cuidado con</h4><ul id="dCare"></ul>
+        <div class="live" id="dLive"></div>
+        <div class="pick" id="pick"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Historial</h2>
+        <ul class="log" id="log"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/simulador.js"></script>
+</body>
+</html>

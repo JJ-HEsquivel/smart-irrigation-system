@@ -12,7 +12,8 @@ envían a un dashboard por Wi-Fi.
 - Ver el ciclo completo animado: **Arranque → Medir → Decidir → Regar → Reportar** (las 5 preguntas de funcionamiento del HC6).
 - **Tocar cualquier pieza** (sensor, placa, relé, bomba, depósito, manguera, fuente, dashboard, planta) para verla ampliada, con su explicación y lo que hay que cuidar al construirla.
 - Modo **paso a paso** y control de velocidad.
-- Ver **la línea del programa** que se está ejecutando en cada momento.
+- Ver **la línea del programa** que se está ejecutando en cada momento: el botón **Código corriendo**
+  (esquina inferior derecha) la muestra en vivo y, al presionarlo, abre el programa completo en un panel lateral.
 - **Probar fallas**: cortar el Wi-Fi, desconectar el sensor, vaciar el depósito o soltar la manguera.
 - **Dashboard del huerto**: riegos de hoy (contador), tabla con hora, agua usada y humedad antes/después,
   total de agua del día, gráfico de humedad con cada riego marcado y las líneas de 35 % y 50 %, y el estado

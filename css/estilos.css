@@ -242,6 +242,39 @@ i.var{font-style:normal;font-family:var(--f-mono);font-size:.9em;padding:0 4px;b
 .glossary dd{margin:0;color:var(--muted)}
 @media (max-width:520px){.glossary dl{grid-template-columns:minmax(0,1fr)}.glossary dd{margin-bottom:6px}}
 .trace td.dec{min-width:160px}
+.trace-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;margin-bottom:10px}
+.trace-head h2{margin:0}
+.link-btn{border:0;background:none;padding:2px 0;color:var(--accent);font-size:14px}
+.link-btn:hover{text-decoration:underline}
+
+/* ---------- Código corriendo: botón en la esquina + panel lateral ---------- */
+body{padding-bottom:72px}
+.code-fab{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;align-items:center;gap:10px;
+  width:min(360px,calc(100vw - 32px));padding:8px 14px;border-radius:12px;text-align:left;
+  background:var(--surface);border:1.5px solid var(--accent);box-shadow:0 6px 20px rgba(0,0,0,.22)}
+.code-fab:hover{border-color:var(--accent);background:var(--accent-soft)}
+.fab-dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--ok);animation:fabPulse 1.4s ease-in-out infinite}
+@keyframes fabPulse{0%,100%{opacity:1}50%{opacity:.3}}
+.fab-txt{display:flex;flex-direction:column;min-width:0;flex:1}
+.fab-txt small{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.fab-txt code{font-family:var(--f-mono);font-size:12.5px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab-open{flex:none;font-size:13px;color:var(--accent)}
+.code-fab.alert{border-color:var(--alert)}
+.code-fab.alert .fab-dot{background:var(--alert)}
+.code-fab.alert .fab-txt code,.code-fab.alert .fab-open{color:var(--alert)}
+.code-open .code-fab{display:none}
+.drawer pre.code span{white-space:pre-wrap;overflow-wrap:anywhere;padding-left:calc(12px + 4ch);text-indent:-4ch}
+@media (max-width:620px){ .drawer pre.code{font-size:12px} }
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:50;width:min(620px,100vw);display:flex;flex-direction:column;
+  background:var(--surface);border-left:1px solid var(--line);box-shadow:-10px 0 28px rgba(0,0,0,.2);
+  transform:translateX(100%);visibility:hidden;transition:transform .25s ease,visibility 0s linear .25s}
+.drawer.open{transform:none;visibility:visible;transition:transform .25s ease}
+.drawer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px 8px;border-bottom:1px solid var(--line)}
+.drawer-head h2{margin:2px 0 0}
+.drawer-close{flex:none;width:36px;height:36px;padding:0;font-size:16px;line-height:1}
+.drawer-body{flex:1;overflow:auto;padding:10px 16px 20px}
+.drawer-note{font-size:12.5px;color:var(--muted);margin:0 0 8px}
+@media (prefers-reduced-motion: reduce){ .drawer,.drawer.open{transition:none} .fab-dot{animation:none} }
 .note code{font-family:var(--f-mono);font-size:.92em}
 
 /* Celular: cada fila de tabla se vuelve una tarjeta con etiquetas */

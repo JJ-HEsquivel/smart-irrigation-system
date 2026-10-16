@@ -256,14 +256,12 @@
         <p class="empty" id="riegoEmpty">Todavía no hubo riegos hoy. Cuando la placa riegue, aparecerá aquí con su hora y su cantidad de agua.</p>
       </section>
 
-      <div class="panel">
-        <h2>El programa que corre en la placa</h2>
-        <pre class="code" id="code" aria-label="Código del programa"></pre>
-      </div>
-
       <!-- SEGUIMIENTO DEL PROGRAMA -->
       <section class="panel trace-panel" id="trace" aria-labelledby="traceTitle">
-        <h2 id="traceTitle">Seguimiento del programa</h2>
+        <div class="trace-head">
+          <h2 id="traceTitle">Seguimiento del programa</h2>
+          <button class="link-btn" id="traceCode" aria-controls="codeDrawer" aria-expanded="false">Ver el código ›</button>
+        </div>
         <p class="lead">Como si lo ejecutáramos a mano en una pizarra. Cada vez que la placa mide se escribe una fila nueva, y la fila se va completando mientras el programa avanza. La fila resaltada es la que se está ejecutando ahora.</p>
 
         <div class="vars" aria-label="Cajitas de la memoria">
@@ -353,6 +351,26 @@
     </div>
   </div>
 </div>
+
+<!-- CÓDIGO CORRIENDO: botón en la esquina y panel lateral -->
+<button class="code-fab" id="codeFab" aria-controls="codeDrawer" aria-expanded="false" title="Ver el programa completo">
+  <span class="fab-dot" aria-hidden="true"></span>
+  <span class="fab-txt"><small>Código corriendo</small><code id="fabLine">void setup() {</code></span>
+  <span class="fab-open">Ver ›</span>
+</button>
+<aside class="drawer" id="codeDrawer" aria-labelledby="codeTitle" aria-hidden="true">
+  <div class="drawer-head">
+    <div>
+      <div class="eyebrow">Código corriendo</div>
+      <h2 id="codeTitle">El programa que corre en la placa</h2>
+    </div>
+    <button class="drawer-close" id="codeClose" aria-label="Cerrar el código">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody">
+    <p class="drawer-note">La línea resaltada es la que la placa está ejecutando ahora. En rojo, cuando salta una alerta.</p>
+    <pre class="code" id="code" aria-label="Código del programa"></pre>
+  </div>
+</aside>
 
 <script src="js/simulador.js"></script>
 </body>

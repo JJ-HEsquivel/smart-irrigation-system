@@ -86,11 +86,11 @@ document.querySelectorAll('[data-cfg-left]').forEach(e=>{ e.style.left=C[e.datas
 const pad = (s,n) => s + ' '.repeat(Math.max(1,n-s.length));
 const CODE = [
   ['// Números de ejemplo: se cambian solo aquí arriba'],
-  [pad(`const int SECO = ${C.SENSOR_SECO};`,40),'// sensor en tierra seca = 0 %'],
-  [pad(`const int MOJADO = ${C.SENSOR_MOJADO};`,40),'// sensor en tierra empapada = 100 %'],
-  [pad(`const int UMBRAL_RIEGO = ${C.UMBRAL_RIEGO};`,40),'// % : empieza a regar'],
-  [pad(`const int UMBRAL_PARADA = ${C.UMBRAL_PARADA};`,40),'// % : deja de regar'],
-  [pad(`const int MAX_PULSOS = ${C.MAX_PULSOS};`,40),'// pulsos seguidos como máximo'],
+  [pad(`const int SECO = ${C.SENSOR_SECO};`,32),'// sensor en tierra seca = 0 %'],
+  [pad(`const int MOJADO = ${C.SENSOR_MOJADO};`,32),'// sensor en tierra empapada = 100 %'],
+  [pad(`const int UMBRAL_RIEGO = ${C.UMBRAL_RIEGO};`,32),'// % : empieza a regar'],
+  [pad(`const int UMBRAL_PARADA = ${C.UMBRAL_PARADA};`,32),'// % : deja de regar'],
+  [pad(`const int MAX_PULSOS = ${C.MAX_PULSOS};`,32),'// pulsos seguidos como máximo'],
   ['bool regando = false;  int pulsos = 0;'],
   [''],
   ['void setup() {'],
@@ -125,8 +125,34 @@ const codeEl = $('code');
 CODE.forEach(([t,c,tag])=>{
   const s=document.createElement('span'); s.textContent=t||' ';
   if(c){ const e=document.createElement('em'); e.textContent='  '+c; s.appendChild(e); }
-  s.dataset.tag = tag||''; codeEl.appendChild(s);
+  s.dataset.tag = tag||''; s.dataset.code = (t||'').trim(); codeEl.appendChild(s);
 });
+
+/* ---------- Código corriendo: panel lateral ---------- */
+const drawer=$('codeDrawer'), fab=$('codeFab');
+function setDrawer(open){
+  drawer.classList.toggle('open',open); drawer.setAttribute('aria-hidden',!open);
+  document.body.classList.toggle('code-open',open);
+  [fab,$('traceCode')].forEach(b=>b.setAttribute('aria-expanded',open));
+  if(open){ $('codeClose').focus({preventScroll:true}); fabShown=null; } else fab.focus({preventScroll:true});
+}
+fab.onclick=()=>setDrawer(true);
+$('traceCode').onclick=()=>setDrawer(true);
+$('codeClose').onclick=()=>setDrawer(false);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && drawer.classList.contains('open')) setDrawer(false); });
+let fabShown='';
+function renderFab(){
+  const act=codeLines.find(l=>l.classList.contains('badl')) || codeLines.find(l=>l.classList.contains('on'));
+  const txt=act?act.dataset.code:'';
+  if(txt===fabShown) return; fabShown=txt;
+  $('fabLine').textContent=txt||'…';
+  fab.classList.toggle('alert',!!act && act.classList.contains('badl'));
+  // mantener visible la línea resaltada dentro del panel
+  if(act && drawer.classList.contains('open')){
+    const body=$('drawerBody'), y=act.offsetTop-body.offsetTop;
+    if(y<body.scrollTop || y+act.offsetHeight>body.scrollTop+body.clientHeight) body.scrollTop=Math.max(0,y-body.clientHeight/3);
+  }
+}
 
 /* ---------- Estado ---------- */
 // S = lo que pasa en la placa y en el huerto. D = lo que el dashboard ya recibió. TR = tabla de seguimiento.
@@ -605,6 +631,7 @@ function render(){
     const isAlarm=S.phase==='alarm' && tags.includes('a-'+S.alarm);
     l.classList.toggle('badl',isAlarm);
     l.classList.toggle('on',!isAlarm && S.phase!=='alarm' && tags.includes(S.phase)); });
+  renderFab();
   // narración
   const n=narration();
   if(n!==lastNarr){ $('narrText').textContent=n; lastNarr=n; }

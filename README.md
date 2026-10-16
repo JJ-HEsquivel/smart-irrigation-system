@@ -14,6 +14,11 @@ envían a un dashboard por Wi-Fi.
 - Modo **paso a paso** y control de velocidad.
 - Ver **la línea del programa** que se está ejecutando en cada momento.
 - **Probar fallas**: cortar el Wi-Fi, desconectar el sensor, vaciar el depósito o soltar la manguera.
+- **Dashboard del huerto**: riegos de hoy (contador), tabla con hora, agua usada y humedad antes/después,
+  total de agua del día, gráfico de humedad con cada riego marcado y las líneas de 35 % y 50 %, y el estado
+  actual (humedad, bomba, Wi-Fi). Sin Wi-Fi muestra "sin conexión" y se pone al día cuando vuelve.
+- **Seguimiento del programa**: tabla que se llena con cada medición, como si se ejecutara el programa a mano,
+  con la explicación en palabras de lo que hace la placa en ese momento. Avanza junto con el modo paso a paso.
 
 > Los números (umbral de 35 %, parada en 50 %, 3 s por riego, 75 ml por pulso) son de ejemplo.
 > Los valores reales salen de calibrar el sensor y medir el caudal de la bomba.
@@ -40,7 +45,9 @@ js/simulador.js     Lógica de la simulación, textos de cada pieza y código mo
 ```
 
 Para cambiar los textos de las piezas, edita el objeto `PARTS` en `js/simulador.js`.
-Para cambiar los límites de riego, busca `35` y `50` en las funciones `decide()` y en el código mostrado (`CODE`).
+Para cambiar los números (límites de 35 % y 50 %, 3 s y 75 ml por pulso, espera, máximo de pulsos,
+calibración del sensor), edita el objeto `CONFIG` al inicio de `js/simulador.js`. Todo lo demás
+(simulación, textos, código mostrado, dashboard y tabla de seguimiento) se actualiza solo.
 
 ## Créditos
 

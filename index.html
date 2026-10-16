@@ -197,13 +197,117 @@
           <button id="tTank" aria-pressed="false">Vaciar depósito</button>
           <button id="tHose" aria-pressed="false">Soltar manguera</button>
         </div>
-        <p class="note">Cada falla muestra por qué el código necesita una protección. Los números (umbral 35 %, 3 s de riego, 75 ml por pulso) son de ejemplo: los reales salen de calibrar el sensor y medir la bomba.</p>
+        <p class="note">Cada falla muestra por qué el código necesita una protección. Los números (empieza a regar bajo <span data-cfg="UMBRAL_RIEGO">35</span> %, para en <span data-cfg="UMBRAL_PARADA">50</span> %, <span data-cfg="SEG_PULSO">3</span> s de riego, <span data-cfg="ML_PULSO">75</span> ml por pulso) son de ejemplo: los reales salen de calibrar el sensor y medir la bomba. Se cambian en <code>CONFIG</code>, al inicio de <code>js/simulador.js</code>.</p>
       </div>
+
+      <!-- DASHBOARD GRANDE -->
+      <section class="panel dash" id="dash" aria-labelledby="dashTitle">
+        <div class="dash-head">
+          <div>
+            <div class="eyebrow">Lo que cualquiera ve desde su celular</div>
+            <h2 id="dashTitle">Dashboard del huerto · Cajón 1</h2>
+          </div>
+          <span class="conn on" id="dConn" role="status">En línea</span>
+        </div>
+        <p class="banner off" id="dOffline" hidden></p>
+        <p class="banner alert" id="dAlert" hidden></p>
+
+        <div class="kpis">
+          <div class="kpi">
+            <span class="k-lbl">Riegos hoy</span>
+            <span class="k-val k-huge" id="kRiegos">0</span>
+            <span class="k-sub" id="kRiegosSub">todavía no se regó hoy</span>
+          </div>
+          <div class="kpi">
+            <span class="k-lbl">Agua usada hoy</span>
+            <span class="k-val" id="kAgua">0 ml</span>
+            <span class="k-sub" id="kAguaSub">nada todavía</span>
+          </div>
+          <div class="kpi kpi-status" id="dStatus">
+            <span class="k-lbl">Estado actual</span>
+            <dl class="status">
+              <dt>Humedad</dt><dd><b id="sHum">--</b> <small id="sHumW"></small></dd>
+              <dt>Bomba</dt><dd id="sPump">Apagada</dd>
+              <dt>Wi-Fi</dt><dd id="sWifi">Conectado</dd>
+              <dt>Último dato</dt><dd id="sLast">--</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="chart-box">
+          <div class="chart-head">
+            <b>Humedad del suelo hoy (%)</b>
+            <span class="chart-key"><i class="key-line"></i>humedad <i class="key-drop"></i>riego <i class="key-band"></i>zona buena</span>
+          </div>
+          <div class="chart-area">
+            <svg id="chart" role="img" aria-label="Gráfico de la humedad del suelo durante el día, con los riegos marcados"></svg>
+            <div class="tip" id="chartTip" hidden></div>
+          </div>
+        </div>
+
+        <h3 class="sub-h">Riegos de hoy</h3>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>#</th><th>Hora</th><th>Pulsos</th><th>Agua</th><th>Humedad antes</th><th>Humedad después</th><th>Resultado</th></tr></thead>
+            <tbody id="riegoBody"></tbody>
+            <tfoot id="riegoFoot"></tfoot>
+          </table>
+        </div>
+        <p class="empty" id="riegoEmpty">Todavía no hubo riegos hoy. Cuando la placa riegue, aparecerá aquí con su hora y su cantidad de agua.</p>
+      </section>
 
       <div class="panel">
         <h2>El programa que corre en la placa</h2>
         <pre class="code" id="code" aria-label="Código del programa"></pre>
       </div>
+
+      <!-- SEGUIMIENTO DEL PROGRAMA -->
+      <section class="panel trace-panel" id="trace" aria-labelledby="traceTitle">
+        <h2 id="traceTitle">Seguimiento del programa</h2>
+        <p class="lead">Como si lo ejecutáramos a mano en una pizarra. Cada vez que la placa mide se escribe una fila nueva, y la fila se va completando mientras el programa avanza. La fila resaltada es la que se está ejecutando ahora.</p>
+
+        <div class="vars" aria-label="Cajitas de la memoria">
+          <div class="var-box" id="v-raw"><span class="vn">raw</span><span class="vv">—</span><span class="vd">número del sensor (0 a 4095)</span></div>
+          <div class="var-box" id="v-hum"><span class="vn">hum</span><span class="vv">—</span><span class="vd">humedad en %</span></div>
+          <div class="var-box" id="v-regando"><span class="vn">regando</span><span class="vv">no</span><span class="vd">¿está en modo riego?</span></div>
+          <div class="var-box" id="v-pulsos"><span class="vn">pulsos</span><span class="vv">0</span><span class="vd">riegos cortos seguidos</span></div>
+        </div>
+        <p class="vars-note">Cada cajita es una <b>variable</b>: un lugar con nombre donde la placa guarda un dato. Se iluminan cuando su valor cambia.</p>
+
+        <div class="explain" id="explain" aria-live="polite">
+          <div class="ex-top"><span class="chip" id="exHead">07:00 · Arranque</span><b>Qué está pasando, en palabras</b></div>
+          <ol id="exList"></ol>
+        </div>
+
+        <div class="trace-bar">
+          <span class="legend"><span class="yn si">Sí</span> se cumple <span class="yn no">No</span> no se cumple <span class="dash-mute">…</span> todavía no se calcula</span>
+          <span class="dash-mute" id="traceCount"></span>
+        </div>
+        <div class="tbl-wrap trace-wrap" id="traceWrap">
+          <table class="tbl trace">
+            <thead><tr>
+              <th>Hora</th><th>Valor crudo del sensor</th><th>Humedad %</th>
+              <th>¿Humedad &lt; <span data-cfg="UMBRAL_RIEGO">35</span> %?</th>
+              <th>¿Humedad ≥ <span data-cfg="UMBRAL_PARADA">50</span> %?</th>
+              <th>¿Está regando?</th><th>Pulsos</th><th>Decisión</th>
+            </tr></thead>
+            <tbody id="traceBody"></tbody>
+          </table>
+        </div>
+
+        <details class="glossary">
+          <summary>Palabras que aparecen aquí</summary>
+          <dl>
+            <dt>Valor crudo</dt><dd>El número tal como sale del sensor, de 0 a 4095. Más alto = tierra más seca.</dd>
+            <dt>Humedad %</dt><dd>El valor crudo convertido a algo fácil de entender: 0 % es tierra seca, 100 % es tierra empapada. La placa descarta los decimales (37,9 queda en 37).</dd>
+            <dt>Equivalencias</dt><dd id="equiv"></dd>
+            <dt>Límite (umbral)</dt><dd>Un número fijo con el que se compara. Aquí hay dos: <span data-cfg="UMBRAL_RIEGO">35</span> % para empezar a regar y <span data-cfg="UMBRAL_PARADA">50</span> % para dejar de regar.</dd>
+            <dt>Modo riego</dt><dd>Se activa cuando la tierra está seca y se apaga cuando ya tiene suficiente agua. Entre los dos límites se queda como estaba: si venía regando sigue regando, y si no venía regando no riega.</dd>
+            <dt>Pulso</dt><dd>Un riego corto: la bomba se enciende <span data-cfg="SEG_PULSO">3</span> segundos (unos <span data-cfg="ML_PULSO">75</span> ml) y después espera antes de volver a medir.</dd>
+            <dt>Relé</dt><dd>Un interruptor que la placa puede accionar. La placa no da suficiente corriente para la bomba; el relé la deja pasar desde la fuente.</dd>
+          </dl>
+        </details>
+      </section>
     </div>
 
     <div class="col">
@@ -211,11 +315,11 @@
         <div class="eyebrow">Lectura en vivo</div>
         <div class="big"><span class="v" id="rHum">26 %</span><span class="pill" id="rState">Seca</span></div>
         <div class="meter" aria-hidden="true">
-          <span class="mark" style="left:35%"></span><span class="mark" style="left:50%"></span>
+          <span class="mark" style="left:35%" data-cfg-left="UMBRAL_RIEGO"></span><span class="mark" style="left:50%" data-cfg-left="UMBRAL_PARADA"></span>
           <span class="needle" id="needle" style="left:26%"></span>
           <span class="tick" style="left:0%;transform:none">0</span>
-          <span class="tick" style="left:35%">35 riega</span>
-          <span class="tick" style="left:50%">50 para</span>
+          <span class="tick" style="left:35%" data-cfg-left="UMBRAL_RIEGO"><span data-cfg="UMBRAL_RIEGO">35</span> riega</span>
+          <span class="tick" style="left:50%" data-cfg-left="UMBRAL_PARADA"><span data-cfg="UMBRAL_PARADA">50</span> para</span>
           <span class="tick" style="left:100%;transform:translateX(-100%)">100</span>
         </div>
         <dl class="kv">

@@ -20,6 +20,7 @@
       <p class="sub">Simulación del prototipo: el sensor mide, la placa decide, el relé enciende la bomba y el dashboard muestra los datos. Toca cualquier pieza para verla de cerca.</p>
     </div>
   </header>
+  <p class="custom-banner" id="customBanner" hidden></p>
 
   <div class="grid">
     <div class="col">
@@ -197,7 +198,14 @@
           <button id="tTank" aria-pressed="false">Vaciar depósito</button>
           <button id="tHose" aria-pressed="false">Soltar manguera</button>
         </div>
-        <p class="note">Cada falla muestra por qué el código necesita una protección. Los números (empieza a regar bajo <span data-cfg="UMBRAL_RIEGO">35</span> %, para en <span data-cfg="UMBRAL_PARADA">50</span> %, <span data-cfg="SEG_PULSO">3</span> s de riego, <span data-cfg="ML_PULSO">75</span> ml por pulso) son de ejemplo: los reales salen de calibrar el sensor y medir la bomba. Se cambian en <code>CONFIG</code>, al inicio de <code>js/simulador.js</code>.</p>
+        <p class="note">Cada falla muestra por qué el código necesita una protección. Los números (empieza a regar bajo <span data-cfg="UMBRAL_RIEGO">35</span> %, para en <span data-cfg="UMBRAL_PARADA">50</span> %, <span data-cfg="SEG_PULSO">3</span> s de riego, <span data-cfg="ML_PULSO">75</span> ml por pulso) son de ejemplo: los reales salen de calibrar el sensor y medir la bomba. Se cambian en <code>CONFIG</code>, al inicio de <code>js/simulador.js</code>, o aquí abajo para experimentar.</p>
+        <details class="tune" id="tune">
+          <summary>Probar con otros números</summary>
+          <p class="mini-note">Cambia un número y presiona <b>Aplicar</b>: la simulación empieza de nuevo con tus números. Sirve para responder preguntas como «¿qué pasa si empieza a regar en 40 %?» o «¿y en un día de mucho sol?».</p>
+          <div class="tune-grid" id="tuneGrid"></div>
+          <p class="tune-err" id="tuneErr" role="alert" hidden></p>
+          <div class="tune-btns"><button class="primary" id="tuneApply">Aplicar</button><button id="tuneReset">Volver a los de ejemplo</button></div>
+        </details>
       </div>
 
       <!-- DASHBOARD GRANDE -->
@@ -230,6 +238,7 @@
               <dt>Bomba</dt><dd id="sPump">Apagada</dd>
               <dt>Wi-Fi</dt><dd id="sWifi">Conectado</dd>
               <dt>Último dato</dt><dd id="sLast">--</dd>
+              <dt title="Estimado con cuánto bajó la humedad en las últimas horas">Próximo riego</dt><dd id="sNext">--</dd>
             </dl>
           </div>
         </div>
@@ -310,18 +319,19 @@
 
     <div class="col">
       <div class="panel">
-        <div class="eyebrow">Lectura en vivo</div>
+        <div class="eyebrow">La tierra ahora mismo</div>
         <div class="big"><span class="v" id="rHum">26 %</span><span class="pill" id="rState">Seca</span></div>
+        <p class="mini-note">Es la humedad real, que cambia todo el tiempo. La placa solo la conoce cuando mide; entre una medición y otra, no se entera.</p>
         <div class="meter" aria-hidden="true">
           <span class="mark" style="left:35%" data-cfg-left="UMBRAL_RIEGO"></span><span class="mark" style="left:50%" data-cfg-left="UMBRAL_PARADA"></span>
           <span class="needle" id="needle" style="left:26%"></span>
           <span class="tick" style="left:0%;transform:none">0</span>
-          <span class="tick" style="left:35%" data-cfg-left="UMBRAL_RIEGO"><span data-cfg="UMBRAL_RIEGO">35</span> riega</span>
-          <span class="tick" style="left:50%" data-cfg-left="UMBRAL_PARADA"><span data-cfg="UMBRAL_PARADA">50</span> para</span>
+          <span class="tick tick-u" style="left:35%" data-cfg-left="UMBRAL_RIEGO">riega ←<span data-cfg="UMBRAL_RIEGO">35</span></span>
+          <span class="tick tick-p" style="left:50%" data-cfg-left="UMBRAL_PARADA"><span data-cfg="UMBRAL_PARADA">50</span>→ para</span>
           <span class="tick" style="left:100%;transform:translateX(-100%)">100</span>
         </div>
         <dl class="kv">
-          <dt>Valor crudo del sensor</dt><dd id="rRaw">2558</dd>
+          <dt>Última medición de la placa</dt><dd id="rRaw">todavía no midió</dd>
           <dt>Bomba</dt><dd id="rPump">Apagada</dd>
           <dt>Modo riego</dt><dd id="rMode">No</dd>
           <dt>Pulsos en este ciclo</dt><dd id="rPulses">0</dd>
@@ -331,6 +341,37 @@
         </dl>
         <div style="margin-top:10px"><span class="eyebrow">Depósito</span><div class="tank"><i id="rTank" style="width:80%"></i></div></div>
       </div>
+
+      <!-- CALCULADORA: ¿QUÉ HARÍA LA PLACA? -->
+      <section class="panel calc" id="calc" aria-labelledby="calcTitle">
+        <div class="eyebrow">Pruébalo tú</div>
+        <h2 id="calcTitle">¿Qué haría la placa?</h2>
+        <p class="mini-note">Escribe un número del sensor y elige si la placa venía regando. Mira la cuenta, la decisión y cuánto tiempo tardaría.</p>
+        <label class="calc-lbl" for="cRaw">Número del sensor</label>
+        <div class="calc-row">
+          <input type="range" id="cRawR" min="1000" max="3500" step="1" aria-label="Número del sensor (deslizar)">
+          <input type="number" id="cRaw" min="0" max="4095" step="1" inputmode="numeric">
+        </div>
+        <div class="calc-row calc-row2">
+          <span class="calc-lbl">¿Venía regando?</span>
+          <div class="seg" role="group" aria-label="¿Venía regando?">
+            <button id="cWasNo" class="on" aria-pressed="true">No</button><button id="cWasYes" aria-pressed="false">Sí</button>
+          </div>
+          <button class="link-btn" id="cUseLive">Usar la última medición</button>
+        </div>
+        <div class="zbar" aria-hidden="true">
+          <i class="z z-seca" id="zSeca"></i><i class="z z-medio" id="zMedio"></i><i class="z z-bien" id="zBien"></i>
+          <span class="zmark" id="zMark"><b id="zVal">25 %</b></span>
+        </div>
+        <ul class="zlegend">
+          <li><i class="z-seca"></i>menos de <span data-cfg="UMBRAL_RIEGO">35</span> %: empieza a regar</li>
+          <li><i class="z-medio"></i>entre <span data-cfg="UMBRAL_RIEGO">35</span> y <span data-cfg="UMBRAL_PARADA">50</span> %: sigue como venía</li>
+          <li><i class="z-bien"></i><span data-cfg="UMBRAL_PARADA">50</span> % o más: no riega</li>
+        </ul>
+        <ol class="calc-steps" id="cSteps"></ol>
+        <div class="calc-out" id="cOut"></div>
+        <p class="note" id="cNote"></p>
+      </section>
 
       <div class="panel detail" id="detail">
         <div class="eyebrow">Pieza ampliada</div>
@@ -355,7 +396,7 @@
 <!-- CÓDIGO CORRIENDO: botón en la esquina y panel lateral -->
 <button class="code-fab" id="codeFab" aria-controls="codeDrawer" aria-expanded="false" title="Ver el programa completo">
   <span class="fab-dot" aria-hidden="true"></span>
-  <span class="fab-txt"><small>Código corriendo</small><code id="fabLine">void setup() {</code></span>
+  <span class="fab-txt"><small>Código corriendo</small><code id="fabLine">void setup() {</code><span class="fab-es" id="fabEs"></span></span>
   <span class="fab-open">Ver ›</span>
 </button>
 <aside class="drawer" id="codeDrawer" aria-labelledby="codeTitle" aria-hidden="true">
@@ -368,6 +409,7 @@
   </div>
   <div class="drawer-body" id="drawerBody">
     <p class="drawer-note">La línea resaltada es la que la placa está ejecutando ahora. En rojo, cuando salta una alerta.</p>
+    <label class="switch"><input type="checkbox" id="codeEs" checked> Explicar cada línea en español</label>
     <pre class="code" id="code" aria-label="Código del programa"></pre>
   </div>
 </aside>

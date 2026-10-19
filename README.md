@@ -24,6 +24,15 @@ envían a un dashboard por Wi-Fi.
 > Los números (umbral de 35 %, parada en 50 %, 3 s por riego, 75 ml por pulso) son de ejemplo.
 > Los valores reales salen de calibrar el sensor y medir el caudal de la bomba.
 
+- **¿Qué haría la placa?**: calculadora donde se escribe un número del sensor y se ve la cuenta
+  (número → %), la decisión con los dos límites y cuánto tardaría (pulsos necesarios o horas hasta el
+  próximo riego).
+- **Código explicado**: en el panel del código, cada línea tiene su traducción al español.
+- **Próximo riego**: el dashboard estima a qué hora volverá a regar, con los datos que recibió.
+- **Probar con otros números**: panel para cambiar los límites, el pulso, la calibración del sensor o lo
+  que se seca por hora, sin tocar el código. Los números quedan en la dirección
+  (por ejemplo `index.html?UMBRAL_RIEGO=40`), así se puede compartir el enlace.
+
 ## Cómo abrirlo
 
 No necesita instalar nada: abre `index.html` con doble clic en cualquier navegador

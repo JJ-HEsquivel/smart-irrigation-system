@@ -23,8 +23,29 @@ const CONFIG = {
   SENSOR_MIN_VALIDO: 900,  // por debajo de esto la lectura es imposible
   SENSOR_MAX_VALIDO: 3600, // por encima de esto la lectura es imposible (sensor suelto)
   DEPOSITO_ML: 1500,       // capacidad del depósito
-  DEPOSITO_MIN_ML: 80      // con menos agua no riega (la bomba no debe girar en seco)
+  DEPOSITO_MIN_ML: 80,     // con menos agua no riega (la bomba no debe girar en seco)
+  // Solo para la simulación (en el prototipo real salen de sus mediciones):
+  SECADO_POR_HORA: 4,      // % que baja la humedad en una hora por el sol y la planta
+  ML_POR_PORCIENTO: 6      // ml de agua que suben la humedad del cajón en 1 %
 };
+/* También se pueden probar otros números sin tocar este archivo, desde el panel
+   «Probar con otros números» de la página (quedan en la dirección: ?UMBRAL_RIEGO=40). */
+const EJEMPLO = {...CONFIG};
+const CUSTOM = {};
+try{
+  new URLSearchParams(location.search).forEach((val,k)=>{
+    if(k in CONFIG && val!=='' && isFinite(+val)){ CONFIG[k]=+val; CUSTOM[k]=+val; } });
+}catch(e){}
+if(Object.keys(CUSTOM).length && validar(CONFIG)) { Object.assign(CONFIG,EJEMPLO); for(const k in CUSTOM) delete CUSTOM[k]; }
+function validar(c){
+  if(!(c.UMBRAL_RIEGO>0 && c.UMBRAL_RIEGO<c.UMBRAL_PARADA && c.UMBRAL_PARADA<=100)) return 'El límite para empezar a regar tiene que ser menor que el límite para parar (y ambos entre 1 y 100).';
+  if(!(c.SENSOR_MOJADO<c.SENSOR_SECO)) return 'El número en tierra seca tiene que ser MAYOR que el número en tierra empapada (este sensor marca más alto cuanto más seca está la tierra).';
+  if(!(c.SENSOR_MOJADO>c.SENSOR_MIN_VALIDO && c.SENSOR_SECO<c.SENSOR_MAX_VALIDO)) return `Los números del sensor tienen que estar entre ${c.SENSOR_MIN_VALIDO} y ${c.SENSOR_MAX_VALIDO}; fuera de ese rango la placa cree que el sensor está suelto.`;
+  if(!(c.SEG_PULSO>=1 && c.SEG_PULSO<=30)) return 'Los segundos de cada pulso tienen que estar entre 1 y 30.';
+  if(!(c.ML_PULSO>=5 && c.ML_PULSO<=1000)) return 'Los ml por pulso tienen que estar entre 5 y 1000.';
+  if(!(c.SECADO_POR_HORA>=0.5 && c.SECADO_POR_HORA<=20)) return 'Lo que se seca por hora tiene que estar entre 0,5 y 20 %.';
+  return '';
+}
 const C = CONFIG;
 
 /* ---------- Datos de las piezas ---------- */
@@ -84,49 +105,56 @@ document.querySelectorAll('[data-cfg-left]').forEach(e=>{ e.style.left=C[e.datas
 
 /* ---------- Código ---------- */
 const pad = (s,n) => s + ' '.repeat(Math.max(1,n-s.length));
+const miles = n => n.toLocaleString('es');
+// [código, comentario, etiqueta de fase, qué significa en español]
 const CODE = [
-  ['// Números de ejemplo: se cambian solo aquí arriba'],
-  [pad(`const int SECO = ${C.SENSOR_SECO};`,32),'// sensor en tierra seca = 0 %'],
-  [pad(`const int MOJADO = ${C.SENSOR_MOJADO};`,32),'// sensor en tierra empapada = 100 %'],
-  [pad(`const int UMBRAL_RIEGO = ${C.UMBRAL_RIEGO};`,32),'// % : empieza a regar'],
-  [pad(`const int UMBRAL_PARADA = ${C.UMBRAL_PARADA};`,32),'// % : deja de regar'],
-  [pad(`const int MAX_PULSOS = ${C.MAX_PULSOS};`,32),'// pulsos seguidos como máximo'],
-  ['bool regando = false;  int pulsos = 0;'],
+  ['// Números de ejemplo: se cambian solo aquí arriba','','','Lo que empieza con // es un comentario: una nota para las personas. La placa lo ignora.'],
+  [pad(`const int SECO = ${C.SENSOR_SECO};`,32),'// sensor en tierra seca = 0 %','',`Le pone nombre a un número fijo: SECO vale ${C.SENSOR_SECO}, lo que marca el sensor en tierra seca.`],
+  [pad(`const int MOJADO = ${C.SENSOR_MOJADO};`,32),'// sensor en tierra empapada = 100 %','',`MOJADO vale ${C.SENSOR_MOJADO}, lo que marca el sensor en tierra empapada.`],
+  [pad(`const int UMBRAL_RIEGO = ${C.UMBRAL_RIEGO};`,32),'// % : empieza a regar','',`El límite para empezar a regar: menos de ${C.UMBRAL_RIEGO} %.`],
+  [pad(`const int UMBRAL_PARADA = ${C.UMBRAL_PARADA};`,32),'// % : deja de regar','',`El límite para dejar de regar: ${C.UMBRAL_PARADA} % o más.`],
+  [pad(`const int MAX_PULSOS = ${C.MAX_PULSOS};`,32),'// pulsos seguidos como máximo','',`Cuántos pulsos seguidos puede dar como máximo antes de avisar que algo anda mal.`],
+  ['bool regando = false;  int pulsos = 0;','','','Dos cajitas que la placa recuerda: si está en modo riego (empieza en «no») y cuántos pulsos lleva (empieza en 0).'],
   [''],
-  ['void setup() {'],
-  ['  pinMode(RELE, OUTPUT);','','boot'],
-  ['  conectarWiFi();','','boot'],
+  ['void setup() {','','','Lo que está entre estas llaves { } se hace una sola vez, al enchufar la placa.'],
+  ['  pinMode(RELE, OUTPUT);','','boot','Prepara el pin del relé para dar órdenes (salida).'],
+  ['  conectarWiFi();','','boot','Se conecta a la red Wi-Fi.'],
   ['}'],
   [''],
-  ['void loop() {'],
-  ['  int raw = analogRead(SENSOR);','// leer el sensor','measure'],
-  ['  int hum = map(raw, SECO, MOJADO, 0, 100);','// pasar a %','measure'],
-  ['  hum = constrain(hum, 0, 100);','// ni menos de 0 ni más de 100','measure'],
-  [`  if (raw > ${C.SENSOR_MAX_VALIDO} || raw < ${C.SENSOR_MIN_VALIDO}) {`,'// ¿sensor suelto?','decide'],
-  ['    alerta("Revisar sensor");','','a-sensor'],
-  ['  } else {'],
-  ['    if (hum < UMBRAL_RIEGO)  regando = true;','// muy seca: empezar','decide'],
-  ['    if (hum >= UMBRAL_PARADA) regando = false;','// suficiente: parar','decide'],
-  ['    if (regando && hayAgua() && pulsos < MAX_PULSOS) {','','decide a-agua a-max'],
-  ['      digitalWrite(RELE, HIGH);','// encender bomba','pump'],
-  ['      enviarDashboard(hum, "regando");','// si hay Wi-Fi','pump'],
-  [`      delay(${C.SEG_PULSO*1000});`,`// regar ${C.SEG_PULSO} s`,'pump'],
-  ['      digitalWrite(RELE, LOW);','// apagar bomba','soak'],
-  [`      delay(${C.MIN_ESPERA*60000});`,`// esperar ${C.MIN_ESPERA} min`,'soak'],
-  ['      pulsos++; return;','// volver a medir','soak'],
+  ['void loop() {','','','Lo que está entre estas llaves { } se repite para siempre, una vuelta tras otra.'],
+  ['  int raw = analogRead(SENSOR);','// leer el sensor','measure','Lee el sensor y guarda el número (de 0 a 4095) en la cajita raw.'],
+  ['  int hum = map(raw, SECO, MOJADO, 0, 100);','// pasar a %','measure',`Convierte ese número a porcentaje: ${C.SENSOR_SECO} → 0 % y ${C.SENSOR_MOJADO} → 100 %. Descarta los decimales.`],
+  ['  hum = constrain(hum, 0, 100);','// ni menos de 0 ni más de 100','measure','Si la cuenta da menos de 0 lo deja en 0; si da más de 100, lo deja en 100.'],
+  [`  if (raw > ${C.SENSOR_MAX_VALIDO} || raw < ${C.SENSOR_MIN_VALIDO}) {`,'// ¿sensor suelto?','decide',`«if» significa «si». ¿El número es imposible (más de ${C.SENSOR_MAX_VALIDO} o menos de ${C.SENSOR_MIN_VALIDO})? Pasa cuando el sensor está suelto. || significa «o».`],
+  ['    alerta("Revisar sensor");','','a-sensor','Si es imposible: avisa «Revisar sensor» y no riega.'],
+  ['  } else {','','','«else» significa «si no». Si la lectura es posible, sigue por aquí.'],
+  ['    if (hum < UMBRAL_RIEGO)  regando = true;','// muy seca: empezar','decide',`Si la humedad es menor que ${C.UMBRAL_RIEGO} %: activa el modo riego.`],
+  ['    if (hum >= UMBRAL_PARADA) regando = false;','// suficiente: parar','decide',`Si llegó a ${C.UMBRAL_PARADA} % o más: apaga el modo riego. Entre los dos límites, nada cambia.`],
+  ['    if (regando && hayAgua() && pulsos < MAX_PULSOS) {','','decide a-agua a-max',`&& significa «y». Riega solo si se cumplen las tres: está en modo riego, hay agua y lleva menos de ${C.MAX_PULSOS} pulsos.`],
+  ['      digitalWrite(RELE, HIGH);','// encender bomba','pump','Enciende el relé (HIGH = encendido): la bomba empieza a funcionar.'],
+  ['      enviarDashboard(hum, "regando");','// si hay Wi-Fi','pump','Avisa al dashboard que está regando. Si no hay Wi-Fi, lo guarda para después.'],
+  [`      delay(${C.SEG_PULSO*1000});`,`// regar ${C.SEG_PULSO} s`,'pump',`Espera con la bomba encendida. delay() cuenta en milisegundos: ${miles(C.SEG_PULSO*1000)} ms = ${C.SEG_PULSO} segundos (unos ${C.ML_PULSO} ml).`],
+  ['      digitalWrite(RELE, LOW);','// apagar bomba','soak','Apaga el relé (LOW = apagado): la bomba se detiene.'],
+  [`      delay(${C.MIN_ESPERA*60000});`,`// esperar ${C.MIN_ESPERA} min`,'soak',`Espera ${miles(C.MIN_ESPERA*60000)} ms = ${C.MIN_ESPERA} minuto, para que el agua llegue hasta el sensor.`],
+  ['      pulsos++; return;','// volver a medir','soak','pulsos++ suma 1 a la cajita pulsos. return vuelve al inicio del loop para medir otra vez.'],
   ['    }'],
   ['  }'],
-  ['  pulsos = 0;','','report'],
-  ['  enviarDashboard(hum);','// si hay Wi-Fi','report'],
-  [`  delay(${C.MIN_ENTRE_MEDIDAS*60000});`,`// esperar ${C.MIN_ENTRE_MEDIDAS} min`,'idle'],
+  ['  pulsos = 0;','','report','Ya no está regando: la cajita pulsos vuelve a 0.'],
+  ['  enviarDashboard(hum);','// si hay Wi-Fi','report','Envía la humedad al dashboard. Si no hay Wi-Fi, la guarda para después.'],
+  [`  delay(${C.MIN_ENTRE_MEDIDAS*60000});`,`// esperar ${C.MIN_ENTRE_MEDIDAS} min`,'idle',`Espera ${miles(C.MIN_ENTRE_MEDIDAS*60000)} ms = ${C.MIN_ENTRE_MEDIDAS} minutos antes de volver a medir.`],
   ['}']
 ];
 const codeEl = $('code');
-CODE.forEach(([t,c,tag])=>{
+CODE.forEach(([t,c,tag,es])=>{
   const s=document.createElement('span'); s.textContent=t||' ';
   if(c){ const e=document.createElement('em'); e.textContent='  '+c; s.appendChild(e); }
-  s.dataset.tag = tag||''; s.dataset.code = (t||'').trim(); codeEl.appendChild(s);
+  if(es){ const x=document.createElement('small'); x.className='es'; x.textContent=es;
+    x.style.marginLeft=((t||'').length-(t||'').trimStart().length)+'ch'; s.appendChild(x); }
+  s.dataset.tag = tag||''; s.dataset.code = (t||'').trim(); s.dataset.es = es||''; codeEl.appendChild(s);
 });
+const esToggle=$('codeEs');
+function syncEs(){ codeEl.classList.toggle('show-es',esToggle.checked); }
+esToggle.addEventListener('change',syncEs); syncEs();
 
 /* ---------- Código corriendo: panel lateral ---------- */
 const drawer=$('codeDrawer'), fab=$('codeFab');
@@ -146,6 +174,7 @@ function renderFab(){
   const txt=act?act.dataset.code:'';
   if(txt===fabShown) return; fabShown=txt;
   $('fabLine').textContent=txt||'…';
+  $('fabEs').textContent=act&&act.dataset.es?act.dataset.es:'';
   fab.classList.toggle('alert',!!act && act.classList.contains('badl'));
   // mantener visible la línea resaltada dentro del panel
   if(act && drawer.classList.contains('open')){
@@ -186,7 +215,7 @@ function log(msg,alert){
 }
 
 function readSensor(){
-  S.hasRead=true;
+  S.hasRead=true; S.measC=S.clock;
   if(!S.sensorOk){ S.raw=4095; S.hum=0; return; }
   const span=C.SENSOR_SECO-C.SENSOR_MOJADO;
   S.raw=Math.round(C.SENSOR_SECO - S.m*span/100 + (Math.random()*30-15));
@@ -194,7 +223,7 @@ function readSensor(){
   S.hum=Math.max(0,Math.min(100,Math.trunc((S.raw-C.SENSOR_SECO)*100/(C.SENSOR_MOJADO-C.SENSOR_SECO))));
 }
 function decide(){
-  S.alarm=null;
+  S.alarm=null; S.prevReg=S.regando;
   if(S.raw>C.SENSOR_MAX_VALIDO||S.raw<C.SENSOR_MIN_VALIDO){ S.alarm='sensor'; S.next='alarm';
     S.decText='Lectura imposible: el sensor está desconectado.'; return; }
   const was=S.regando;
@@ -243,7 +272,7 @@ function report(){
 function startRiego(){ S.cur={id:++S.riegoId,c:S.clock,antes:S.hum,pulsos:0,ml:0,despues:null,fin:null}; }
 function endRiego(motivo){
   if(!S.cur) return;
-  S.cur.despues=S.hum; S.cur.fin=motivo;
+  S.cur.despues=S.hum; S.cur.fin=motivo; S.cur.finC=S.clock;
   send({k:'fin',c:S.clock,hum:S.hum,r:{...S.cur}});
   log(`Riego ${S.cur.id} terminado: ${S.cur.pulsos} pulso(s), ${Math.round(S.cur.ml)} ml, ${S.cur.antes} % → ${S.hum} %`, motivo!=='ok');
   S.cur=null;
@@ -324,8 +353,8 @@ function update(dt){
     S.clock+=dt*(C.SEG_PULSO/60)/ph.dur;
   } else S.flow=0;
   // el agua se va absorbiendo
-  const tr=S.pending*(1-Math.exp(-dt*0.85)); S.pending-=tr; S.m+=tr/6;
-  if(S.phase==='idle'){ S.m-=dt*(4*C.MIN_ENTRE_MEDIDAS/60)/ph.dur; S.clock+=dt*C.MIN_ENTRE_MEDIDAS/ph.dur; }
+  const tr=S.pending*(1-Math.exp(-dt*0.85)); S.pending-=tr; S.m+=tr/C.ML_POR_PORCIENTO;
+  if(S.phase==='idle'){ S.m-=dt*(C.SECADO_POR_HORA*C.MIN_ENTRE_MEDIDAS/60)/ph.dur; S.clock+=dt*C.MIN_ENTRE_MEDIDAS/ph.dur; }
   if(S.phase==='soak'){ S.clock+=dt*C.MIN_ESPERA/ph.dur; S.m-=dt*0.05; }
   S.m=Math.max(0,Math.min(100,S.m));
   const day=Math.floor(S.clock/1440);
@@ -377,6 +406,83 @@ $('equiv').innerHTML = `0 % = ${C.SENSOR_SECO} · <b>${C.UMBRAL_RIEGO} % = ${cru
   `Si el sensor marca <b>más de ${crudoDe(C.UMBRAL_RIEGO)}</b>, la humedad está bajo ${C.UMBRAL_RIEGO} % y empieza a regar. Si marca <b>${crudoDe(C.UMBRAL_PARADA)} o menos</b>, llegó a ${C.UMBRAL_PARADA} % y deja de regar.`;
 const yn = b =>b?'<span class="yn si">Sí</span>':'<span class="yn no">No</span>';
 const v = n => `<i class="var">${n}</i>`;
+
+/* ---------- Calculadora «¿Qué haría la placa?» ---------- */
+const subePorPulso = C.ML_PULSO/C.ML_POR_PORCIENTO;
+let calcWas=false;
+$('zSeca').style.width=C.UMBRAL_RIEGO+'%';
+$('zMedio').style.left=C.UMBRAL_RIEGO+'%'; $('zMedio').style.width=(C.UMBRAL_PARADA-C.UMBRAL_RIEGO)+'%';
+$('zBien').style.left=C.UMBRAL_PARADA+'%'; $('zBien').style.width=(100-C.UMBRAL_PARADA)+'%';
+function calc(){
+  const U=C.UMBRAL_RIEGO, P=C.UMBRAL_PARADA, L=[];
+  let raw=parseInt($('cRaw').value,10), out='', cls='', note='';
+  if(!Number.isFinite(raw)){ $('cSteps').innerHTML=''; $('cOut').className='calc-out'; $('cOut').textContent='Escribe un número de 0 a 4095.'; $('cNote').textContent=''; return; }
+  raw=Math.max(0,Math.min(4095,raw));
+  if(raw>C.SENSOR_MAX_VALIDO || raw<C.SENSOR_MIN_VALIDO){
+    L.push(`¿${raw} está entre ${C.SENSOR_MIN_VALIDO} y ${C.SENSOR_MAX_VALIDO}? ${yn(false)} Es una lectura imposible: el sensor está suelto o fallando.`);
+    out='no riega y avisa «Revisar sensor»'; cls='alert';
+    note='Sin esta revisión, la placa creería que la tierra está totalmente seca y regaría sin parar.';
+    $('zMark').hidden=true;
+  } else {
+    const per=(C.SENSOR_SECO-C.SENSOR_MOJADO)/100, dif=C.SENSOR_SECO-raw, ex=dif/per;
+    const h=Math.max(0,Math.min(100,Math.trunc((raw-C.SENSOR_SECO)*100/(C.SENSOR_MOJADO-C.SENSOR_SECO))));
+    L.push(`Pasar a %: ${C.SENSOR_SECO} − ${raw} = <b>${dif}</b>, y ${dif} ÷ ${num(per)} = ${num(ex,2)}`);
+    L.push(ex<0?`Da menos de 0, así que queda en <b>0 %</b>`:ex>100?`Da más de 100, así que queda en <b>100 %</b>`:`Sin decimales: <b>${h} %</b>`);
+    const lt=h<U, ge=h>=P; let reg=calcWas; if(lt) reg=true; if(ge) reg=false;
+    L.push(`¿${h} es menor que ${U}? ${yn(lt)}${lt?' → activa el modo riego':''}`);
+    L.push(`¿${h} es mayor o igual a ${P}? ${yn(ge)}${ge?' → apaga el modo riego':''}`);
+    if(!lt && !ge) L.push(`Ninguna de las dos reglas se cumple: <b>sigue como venía</b> (${calcWas?'regando':'sin regar'}).`);
+    if(reg){
+      const n=Math.ceil((P-h)/subePorPulso);
+      out='riega'; cls='riega';
+      note = n>C.MAX_PULSOS
+        ? `Necesitaría unos ${n} pulsos, pero el máximo seguido es ${C.MAX_PULSOS}: después de ${C.MAX_PULSOS} se detendría y avisaría.`
+        : `Le faltan ${P-h} % para llegar a ${P} %. Cada pulso sube unos ${num(subePorPulso)} %: ${P-h} ÷ ${num(subePorPulso)} = ${num((P-h)/subePorPulso)} → necesita <b>${n} ${n===1?'pulso':'pulsos'}</b> (siempre se redondea hacia arriba). Eso es ≈ ${Math.max(1,Math.round(n*(C.SEG_PULSO/60+C.MIN_ESPERA)))} min y ≈ ${n*C.ML_PULSO} ml de agua.`;
+    } else {
+      out = (calcWas && ge) ? 'deja de regar' : 'no riega'; cls = (calcWas && ge) ? 'para' : 'no';
+      const horas=Math.floor((h-U)/C.SECADO_POR_HORA)+1, hTxt=horas===1?'1 hora':horas+' horas';
+      note = h===U
+        ? `Está justo en ${U} %: todavía no riega, porque la regla es «menos de ${U}». Como mide una vez por hora, en la próxima medición (en <b>1 hora</b>) ya estará más seca y empezará a regar.`
+        : `La tierra baja unos ${num(C.SECADO_POR_HORA)} % por hora. Le faltan ${h-U} % para llegar a ${U} %: ${h-U} ÷ ${num(C.SECADO_POR_HORA)} = ${num((h-U)/C.SECADO_POR_HORA)} h. Como mide una vez por hora y tiene que bajar <i>de</i> ${U}, volvería a regar en unas <b>${hTxt}</b>.`;
+    }
+    $('zMark').hidden=false; $('zMark').style.left=h+'%'; $('zVal').textContent=h+' %';
+  }
+  $('cSteps').innerHTML=L.map(x=>`<li>${x}</li>`).join('');
+  $('cOut').className='calc-out '+cls; $('cOut').innerHTML=`Decisión: <b>${out}</b>`;
+  $('cNote').innerHTML=note+` <span class="dash-mute">Tiempos con los números del simulador (${num(C.SECADO_POR_HORA)} % por hora, ${num(subePorPulso)} % por pulso); los reales salen de sus mediciones.</span>`;
+}
+function setCalcRaw(x){ $('cRaw').value=x; $('cRawR').value=x; calc(); }
+function setCalcWas(w){ calcWas=w; $('cWasNo').classList.toggle('on',!w); $('cWasYes').classList.toggle('on',w);
+  $('cWasNo').setAttribute('aria-pressed',!w); $('cWasYes').setAttribute('aria-pressed',w); calc(); }
+$('cRaw').addEventListener('input',()=>{ const x=parseInt($('cRaw').value,10); if(Number.isFinite(x)) $('cRawR').value=x; calc(); });
+$('cRawR').addEventListener('input',()=>setCalcRaw($('cRawR').value));
+$('cWasNo').onclick=()=>setCalcWas(false);
+$('cWasYes').onclick=()=>setCalcWas(true);
+$('cUseLive').onclick=()=>{ if(!S.hasRead) return; calcWas=!!S.prevReg; setCalcRaw(S.raw); setCalcWas(calcWas); };
+setCalcRaw(2572);
+
+/* ---------- Probar con otros números ---------- */
+const TUNE=[['UMBRAL_RIEGO','Empieza a regar bajo','%',1,99,1],['UMBRAL_PARADA','Deja de regar en','%',2,100,1],
+  ['SEG_PULSO','Segundos por pulso','s',1,30,1],['ML_PULSO','Agua por pulso','ml',5,1000,5],
+  ['SENSOR_SECO','Sensor en tierra seca (0 %)','',901,3599,1],['SENSOR_MOJADO','Sensor en tierra empapada (100 %)','',901,3599,1],
+  ['SECADO_POR_HORA','Cuánto se seca por hora (simulación)','%',0.5,20,0.5]];
+$('tuneGrid').innerHTML=TUNE.map(([k,lab,u,mn,mx,st])=>`<label class="tune-f"><span>${lab}</span>
+  <span class="tin"><input type="number" id="t-${k}" value="${C[k]}" min="${mn}" max="${mx}" step="${st}" inputmode="decimal">${u?`<i>${u}</i>`:''}</span>
+  <small>ejemplo: ${miles(EJEMPLO[k])}${u?' '+u:''}</small></label>`).join('');
+const sinParams = () => location.href.split('?')[0].split('#')[0];
+$('tuneApply').onclick=()=>{
+  const nuevo={...EJEMPLO}; TUNE.forEach(([k])=>{ nuevo[k]=parseFloat($('t-'+k).value.replace(',','.')); });
+  const err=validar(nuevo); $('tuneErr').hidden=!err; $('tuneErr').textContent=err; if(err) return;
+  const q=new URLSearchParams(); TUNE.forEach(([k])=>{ if(nuevo[k]!==EJEMPLO[k]) q.set(k,nuevo[k]); });
+  location.href = sinParams() + (q.toString()?'?'+q.toString():'');
+};
+$('tuneReset').onclick=()=>{ location.href=sinParams(); };
+if(Object.keys(CUSTOM).length){
+  const lista=TUNE.filter(([k])=>k in CUSTOM).map(([k,lab,u])=>`${lab.toLowerCase()}: <b>${miles(C[k])}${u?' '+u:''}</b> (ejemplo: ${miles(EJEMPLO[k])})`).join(' · ');
+  $('customBanner').innerHTML=`Estás probando con otros números: ${lista}. <button class="link-btn" id="bannerReset">Volver a los de ejemplo</button>`;
+  $('customBanner').hidden=false; $('bannerReset').onclick=()=>{ location.href=sinParams(); };
+  $('tune').open=true;
+}
 function explain(){
   const r=trRow(), h=S.hum, U=C.UMBRAL_RIEGO, P=C.UMBRAL_PARADA;
   switch(S.phase){
@@ -509,6 +615,7 @@ function renderDash(){
   $('sWifi').className = S.wifi?'':'st-off';
   $('sLast').textContent = D.lastC!=null ? fmt(D.lastC) : '--';
   $('dStatus').classList.toggle('stale',!S.wifi);
+  $('sNext').textContent=proximoRiego(riegos);
   // tabla de riegos
   const motivo={ok:`llegó a ${C.UMBRAL_PARADA} %`,agua:'paró: sin agua',max:`paró: ${C.MAX_PULSOS} pulsos`};
   $('riegoBody').innerHTML = riegos.map((r,i)=>`<tr${r.fin?'':' class="now"'}>
@@ -519,6 +626,23 @@ function renderDash(){
   $('riegoFoot').innerHTML = riegos.length ? `<tr><td colspan="3" class="foot-l">Total de hoy</td><td class="mono" data-l="Total de hoy"><b>${Math.round(ml)} ml</b></td><td colspan="3" class="foot-pad"></td></tr>` : '';
   $('riegoEmpty').hidden = riegos.length>0;
   drawChart(W,riegos,t0);
+}
+// Estima el próximo riego con los datos que llegaron: cuánto bajó la humedad desde el último riego.
+function proximoRiego(riegos){
+  if(D.bomba || riegos.some(r=>!r.fin)) return 'regando ahora';
+  if(D.lastHum==null) return '--';
+  if(D.lastHum<C.UMBRAL_RIEGO) return 'en la próxima medición';
+  const pts=D.points, p1=pts[pts.length-1]; if(!p1) return '--';
+  const finUlt=[...D.riegos.values()].reduce((m,r)=>Math.max(m,r.finC??-Infinity),-Infinity);
+  // el dato más antiguo desde que terminó el último riego (así la velocidad de secado es más estable)
+  const p0=pts.find(p=>p.c>=finUlt && p1.c-p.c>=110);
+  if(!p0) return 'calculando…';
+  const porHora=(p0.hum-p1.hum)/((p1.c-p0.c)/60);
+  if(porHora<0.3) return 'calculando…';
+  // misma regla que la placa: riega en la primera medición (una por hora) en que la humedad esté por debajo del límite
+  const mediciones=Math.floor((p1.hum-C.UMBRAL_RIEGO)/(porHora*C.MIN_ENTRE_MEDIDAS/60))+1;
+  const eta=p1.c+mediciones*C.MIN_ENTRE_MEDIDAS, faltan=Math.round((eta-S.clock)/60);
+  return eta<=S.clock+5 ? 'en la próxima medición' : `≈ ${fmt(eta)} (en ${faltan<1?'menos de 1 h':faltan===1?'1 hora':faltan+' horas'})`;
 }
 function drawChart(W,riegos,t0){
   const H = W<520 ? 210 : 250;
@@ -642,7 +766,7 @@ function render(){
   const st=stateWord(m); const pill=$('rState'); pill.textContent=st.charAt(0).toUpperCase()+st.slice(1);
   pill.style.color = m<C.UMBRAL_RIEGO?'var(--warn)':m<=60?'var(--ok)':'var(--water)';
   $('needle').style.left=Math.max(0,Math.min(100,m))+'%';
-  $('rRaw').textContent=S.sensorOk?S.raw:'4095 (!)';
+  $('rRaw').textContent=!S.hasRead?'todavía no midió':(S.raw>C.SENSOR_MAX_VALIDO?`${S.raw} (!) · ${fmt(S.measC)}`:`${S.raw} → ${S.hum} % · ${fmt(S.measC)}`);
   $('rPump').textContent=S.pumpOn?'Encendida':'Apagada';
   $('rPump').style.color=S.pumpOn?'var(--water)':'';
   $('rMode').textContent=S.regando?`Sí (hasta ${C.UMBRAL_PARADA} %)`:'No';
@@ -686,7 +810,7 @@ function syncPlay(){
 $('btnPlay').onclick=()=>{ paused=!paused; syncPlay(); };
 $('btnStep').onclick=()=>{ stepMode=!stepMode; $('btnStep').setAttribute('aria-pressed',stepMode); if(!stepMode){paused=false;} syncPlay(); };
 $('btnNext').onclick=()=>{ paused=false; syncPlay(); };
-document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{ speed=+b.dataset.sp; document.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x===b)); });
+document.querySelectorAll('.controls .seg button').forEach(b=>b.onclick=()=>{ speed=+b.dataset.sp; document.querySelectorAll('.controls .seg button').forEach(x=>x.classList.toggle('on',x===b)); });
 function resetTests(){ ['tWifi','tSensor','tTank','tHose'].forEach(id=>$(id).setAttribute('aria-pressed','false')); $('tWifi').textContent='Cortar Wi-Fi'; $('tSensor').textContent='Desconectar sensor'; $('tTank').textContent='Vaciar depósito'; $('tHose').textContent='Soltar manguera'; }
 $('btnReset').onclick=()=>{ S=fresh(); D=freshDash(); TR=freshTrace(); varsPrev={}; $('log').innerHTML=''; resetTests(); enter('boot'); if(!stepMode) paused=false; syncPlay(); };
 $('tDry').onclick=()=>{ S.m=Math.max(0,S.m-15); log('Sol fuerte: la tierra se seca 15 %'); };

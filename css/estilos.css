@@ -337,28 +337,17 @@ pre.code.show-es span.badl small.es{color:var(--alert)}
 .tune-btns{display:flex;flex-wrap:wrap;gap:8px}
 .custom-banner{margin:0 0 12px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--warn);background:var(--alert-soft);font-size:13.5px}
 .custom-banner[hidden]{display:none}
-.note code{font-family:var(--f-mono);font-size:.92em}
 
-/* Celular: cada fila de tabla se vuelve una tarjeta con etiquetas */
-@media (max-width:620px){
-  .tbl thead{display:none}
-  .tbl,.tbl tbody,.tbl tfoot,.tbl tr{display:block;width:100%}
-  .tbl tr{border-bottom:1px solid var(--line);padding:6px 0}
-  .tbl tbody tr:last-child{border-bottom:0}
-  .tbl td{display:flex;justify-content:space-between;align-items:center;gap:12px;border:0;padding:3px 12px;text-align:right}
-  .tbl td::before{content:attr(data-l);color:var(--muted);font-family:var(--f-body);font-size:12.5px;font-weight:700;text-align:left}
-  .tbl tr.now td:first-child{box-shadow:none}
-  .tbl tr.now{border-left:3px solid var(--accent);background:var(--accent-soft)}
-  .tbl tfoot tr{border-top:2px solid var(--line)}
-  .tbl tfoot td{border:0}
-  .tbl tfoot .foot-l,.tbl tfoot .foot-pad{display:none}
-  .trace td.dec{min-width:0;display:flex}
-  .trace td.dec b,.trace td.dec small{text-align:right}
-  .trace td.dec > b + small{margin-left:auto}
-  .trace td.dec{flex-wrap:wrap}
-  .trace td.dec::before{flex:1 1 auto}
-  .trace-wrap{max-height:460px}
-  .trace .empty-row{display:block;text-align:center}
-  .trace .empty-row::before{content:none}
-}
-@media (prefers-reduced-motion: reduce){ .var-box.chg{animation:none} }
+/* Botón «QR» debajo del dibujo y QR a pantalla completa */
+.hint{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.qr-btn{flex:none;font-family:var(--f-mono);font-size:14px;font-weight:700;padding:5px 14px;border-color:var(--accent);color:var(--accent)}
+.qr-full{position:fixed;inset:0;z-index:60;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:16px}
+.qr-full[hidden]{display:none}
+.qr-big{width:min(82vh,92vw);aspect-ratio:1}
+.qr-big svg{display:block;width:100%;height:100%}
+.qr-x{position:absolute;top:12px;right:12px;width:44px;height:44px;padding:0;font-size:20px;background:#fff;color:#16231d;border-color:#d3dcd4}
+.qr-nav{display:flex;align-items:center;gap:14px;color:#8a978f;font-family:var(--f-mono);font-size:13px}
+.qr-nav button{width:40px;height:36px;padding:0;font-size:22px;line-height:1;background:#fff;color:#16231d;border-color:#d3dcd4}
+.qr-local{margin:0;max-width:520px;text-align:center;font-size:14px;color:#b8410c}
+.qr-local[hidden]{display:none}
+.qr-open .code-fab{display:none}

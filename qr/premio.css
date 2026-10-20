@@ -1,0 +1,12 @@
+/* Páginas sorpresa del juego de QR: pensadas para la pantalla del celular */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000}
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;color:#f3f6f4;font-family:"Segoe UI",system-ui,sans-serif;text-align:center}
+/* solo la imagen, lo más grande posible sin recortarla */
+.solo{display:block;width:100vw;height:100vh;height:100dvh;object-fit:contain}
+/* la del premio (pollo) */
+.premio{display:flex;flex-direction:column;align-items:center;gap:18px;padding:24px 16px}
+.premio .big{font-size:clamp(90px,30vw,160px);line-height:1}
+.premio h1{margin:0;font-size:clamp(32px,10vw,64px);line-height:1.05;font-weight:900;text-wrap:balance}
+.premio h1 span{color:#ffcf4a}
+.premio p{margin:0;font-size:clamp(17px,4.8vw,22px);max-width:28ch;line-height:1.4}

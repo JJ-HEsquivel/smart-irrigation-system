@@ -33,6 +33,15 @@ envían a un dashboard por Wi-Fi.
   que se seca por hora, sin tocar el código. Los números quedan en la dirección
   (por ejemplo `index.html?UMBRAL_RIEGO=40`), así se puede compartir el enlace.
 
+- **Portapilas con interruptor** (la batería de la lista de materiales): botones **Apagar batería** y
+  **Pilas nuevas**. Las pilas se van gastando; si se apagan o se agotan, la placa deja de funcionar y al
+  volver empieza de cero desde `setup()`. El dashboard muestra la batería y avisa cuando está baja.
+  A escala real lo reemplazaría un panel solar con batería.
+- **Botón QR** (debajo del dibujo): muestra un QR a pantalla completa. Con ‹ › se pasa al siguiente:
+  los 4 primeros abren las sorpresas de la carpeta `qr/` y el quinto abre el simulador.
+  Los QR se arman solos con la dirección donde está publicada la página (por ejemplo en Vercel).
+  **Después de la reunión conviene borrar la carpeta `qr/`** antes de mostrar el enlace al jurado.
+
 ## Cómo abrirlo
 
 No necesita instalar nada: abre `index.html` con doble clic en cualquier navegador

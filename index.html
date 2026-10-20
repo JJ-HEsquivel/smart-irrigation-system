@@ -115,13 +115,18 @@
               <text class="label" x="660" y="155">Relé</text>
             </g>
 
-            <!-- FUENTE -->
-            <g class="comp" id="c-fuente" data-id="fuente" tabindex="0" role="button" aria-label="Fuente de 5 voltios">
-              <rect x="455" y="330" width="80" height="52" rx="8" fill="#e9ecea" stroke="#9aa39e"/>
-              <rect x="443" y="342" width="12" height="6" fill="#9aa39e"/><rect x="443" y="362" width="12" height="6" fill="#9aa39e"/>
-              <text x="495" y="361" font-family="JetBrains Mono, monospace" font-size="12" fill="#333" text-anchor="middle">5V 2A</text>
-              <text class="label" x="455" y="402">Fuente 5 V</text>
+            <!-- BATERÍA CON INTERRUPTOR -->
+            <g class="comp" id="c-fuente" data-id="fuente" tabindex="0" role="button" aria-label="Portapilas (batería) con interruptor">
+              <rect x="455" y="330" width="80" height="52" rx="8" fill="#2f3a40" stroke="#9aa39e"/>
+              <rect x="461" y="336" width="56" height="40" rx="4" fill="#1b2328"/>
+              <rect id="bat-fill" x="463" y="338" width="38" height="36" rx="3" fill="#4caf50"/>
+              <text id="batLbl" x="489" y="361" font-family="JetBrains Mono, monospace" font-size="12" font-weight="600" fill="#fff" text-anchor="middle" paint-order="stroke" stroke="#1b2328" stroke-width="3">70%</text>
+              <rect x="521" y="337" width="10" height="38" rx="3" fill="#11181b"/>
+              <rect id="bat-sw" x="522" y="339" width="8" height="16" rx="2" fill="#7ee08a"/>
+              <text class="label" x="455" y="402">Portapilas</text>
+              <text class="label-s" x="455" y="418" id="batState">encendida</text>
             </g>
+
 
             <!-- MANGUERA Y GOTERO -->
             <g class="comp" id="c-manguera" data-id="manguera" tabindex="0" role="button" aria-label="Manguera y gotero">
@@ -175,7 +180,7 @@
             <circle id="dot" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2" opacity="0"/>
           </g>
         </svg>
-        <div class="hint">Toca o haz clic en una pieza para ampliarla. Los cables amarillos llevan señales; los rojos, energía.</div>
+        <div class="hint"><span>Toca o haz clic en una pieza para ampliarla. Los cables amarillos llevan señales; los rojos, energía.</span><button class="qr-btn" id="qrOpen" aria-haspopup="dialog">QR</button></div>
       </div>
 
       <div class="panel">
@@ -197,6 +202,8 @@
           <button id="tSensor" aria-pressed="false">Desconectar sensor</button>
           <button id="tTank" aria-pressed="false">Vaciar depósito</button>
           <button id="tHose" aria-pressed="false">Soltar manguera</button>
+          <button id="tPilas">Pilas nuevas</button>
+          <button id="tBat" aria-pressed="false">Apagar batería</button>
         </div>
         <p class="note">Cada falla muestra por qué el código necesita una protección. Los números (empieza a regar bajo <span data-cfg="UMBRAL_RIEGO">35</span> %, para en <span data-cfg="UMBRAL_PARADA">50</span> %, <span data-cfg="SEG_PULSO">3</span> s de riego, <span data-cfg="ML_PULSO">75</span> ml por pulso) son de ejemplo: los reales salen de calibrar el sensor y medir la bomba. Se cambian en <code>CONFIG</code>, al inicio de <code>js/simulador.js</code>, o aquí abajo para experimentar.</p>
         <details class="tune" id="tune">
@@ -237,6 +244,7 @@
               <dt>Humedad</dt><dd><b id="sHum">--</b> <small id="sHumW"></small></dd>
               <dt>Bomba</dt><dd id="sPump">Apagada</dd>
               <dt>Wi-Fi</dt><dd id="sWifi">Conectado</dd>
+              <dt>Batería</dt><dd id="sBat">--</dd>
               <dt>Último dato</dt><dd id="sLast">--</dd>
               <dt title="Estimado con cuánto bajó la humedad en las últimas horas">Próximo riego</dt><dd id="sNext">--</dd>
             </dl>
@@ -263,6 +271,7 @@
           </table>
         </div>
         <p class="empty" id="riegoEmpty">Todavía no hubo riegos hoy. Cuando la placa riegue, aparecerá aquí con su hora y su cantidad de agua.</p>
+
       </section>
 
       <!-- SEGUIMIENTO DEL PROGRAMA -->
@@ -337,6 +346,7 @@
           <dt>Pulsos en este ciclo</dt><dd id="rPulses">0</dd>
           <dt>Agua usada</dt><dd id="rUsed">0 ml</dd>
           <dt>Wi-Fi</dt><dd id="rWifi">Conectado</dd>
+          <dt>Batería</dt><dd id="rBat">70 %</dd>
           <dt>Hora simulada</dt><dd id="rClock">07:00</dd>
         </dl>
         <div style="margin-top:10px"><span class="eyebrow">Depósito</span><div class="tank"><i id="rTank" style="width:80%"></i></div></div>
@@ -414,6 +424,15 @@
   </div>
 </aside>
 
+<!-- QR a pantalla completa (botón «QR» debajo del dibujo) -->
+<div class="qr-full" id="qrFull" role="dialog" aria-label="Código QR" hidden>
+  <button class="qr-x" id="qrClose" aria-label="Cerrar">✕</button>
+  <div class="qr-big" id="qrBig"></div>
+  <p class="qr-local" id="qrLocal" hidden></p>
+  <div class="qr-nav"><button id="qrPrev" aria-label="QR anterior">‹</button><span id="qrN">1 / 5</span><button id="qrNext" aria-label="Siguiente QR">›</button></div>
+</div>
+
+<script src="js/qr.js"></script>
 <script src="js/simulador.js"></script>
 </body>
 </html>

@@ -24,6 +24,13 @@ const CONFIG = {
   SENSOR_MAX_VALIDO: 3600, // por encima de esto la lectura es imposible (sensor suelto)
   DEPOSITO_ML: 1500,       // capacidad del depósito
   DEPOSITO_MIN_ML: 80,     // con menos agua no riega (la bomba no debe girar en seco)
+  // Energía: portapilas con interruptor (a escala real lo reemplazaría un panel solar con batería)
+  BATERIA_MAH: 2500,       // capacidad: 4 pilas AA recargables, unos 2000 a 2500 mAh
+  CONSUMO_PLACA_MA: 80,    // mA que gasta la ESP32 con el Wi-Fi encendido
+  CONSUMO_BOMBA_MA: 400,   // mA que gasta la bomba mientras gira
+  BATERIA_INICIAL: 100,    // % de batería al empezar la simulación (pilas recién cargadas)
+  BATERIA_BAJA: 20,        // % : avisa «batería baja» al dashboard
+  BATERIA_APAGA: 5,        // % : con menos, la placa se apaga sola
   // Solo para la simulación (en el prototipo real salen de sus mediciones):
   SECADO_POR_HORA: 4,      // % que baja la humedad en una hora por el sol y la planta
   ML_POR_PORCIENTO: 6      // ml de agua que suben la humedad del cajón en 1 %
@@ -44,6 +51,7 @@ function validar(c){
   if(!(c.SEG_PULSO>=1 && c.SEG_PULSO<=30)) return 'Los segundos de cada pulso tienen que estar entre 1 y 30.';
   if(!(c.ML_PULSO>=5 && c.ML_PULSO<=1000)) return 'Los ml por pulso tienen que estar entre 5 y 1000.';
   if(!(c.SECADO_POR_HORA>=0.5 && c.SECADO_POR_HORA<=20)) return 'Lo que se seca por hora tiene que estar entre 0,5 y 20 %.';
+  if(!(c.BATERIA_MAH>=200 && c.BATERIA_MAH<=30000)) return 'La capacidad de la batería tiene que estar entre 200 y 30 000 mAh.';
   return '';
 }
 const C = CONFIG;
@@ -80,11 +88,14 @@ const PARTS = {
     does:'Lleva el agua directo a la raíz (riego por goteo), así se evapora y desperdicia menos.',
     care:['Comprobar que el diámetro calce en la salida de la bomba antes de comprar.','El agua tarda en llegar hasta el sensor: por eso se riega en pulsos cortos y se espera antes de volver a medir.'],
     live:()=> S.hoseLoose ? 'Suelta: el agua se pierde en la mesa' : (S.pumpOn ? 'Llevando agua al gotero' : 'Sin flujo')},
-  fuente:{name:'Fuente USB de 5 V y 2 A', role:'La energía',
-    what:'Un cargador de celular común.',
-    does:'Alimenta la placa y, a través del relé, la bomba.',
-    care:['El arranque de la bomba puede bajar el voltaje y reiniciar la placa: un capacitor de 470 a 1000 µF cerca de la bomba lo evita.','Mejor un cargador que pilas: las pilas se agotan y el voltaje baja.'],
-    live:()=> 'Entregando 5 V'},
+  fuente:{name:'Portapilas con interruptor (la batería)', role:'La energía',
+    what:'Un soporte para 4 pilas AA con un interruptor. Así el prototipo no necesita enchufe y se puede apagar y prender.',
+    does:'Alimenta la placa y, a través del relé, la bomba. A escala real, en el huerto, lo reemplazaría un panel solar con su batería: la idea es la misma, pero se recarga sola con el sol.',
+    care:[`Cuánto dura: ${C.BATERIA_MAH} mAh ÷ ${C.CONSUMO_PLACA_MA} mA ≈ ${Math.round(C.BATERIA_MAH/C.CONSUMO_PLACA_MA)} horas, un poco más de un día. Alcanza para mostrarlo, no para dejarlo semanas.`,
+      'Mejor 4 pilas AA recargables (4,8 V). Con 4 alcalinas nuevas son 6 V: la placa lo aguanta por su pin VIN, pero la bomba gira más fuerte. Con 3 pilas (4,5 V) puede quedarse corto.',
+      'Si se apaga, la placa «olvida» todo y empieza de nuevo desde setup().',
+      'El arranque de la bomba puede bajar el voltaje y reiniciar la placa: un capacitor de 470 a 1000 µF cerca de la bomba lo evita.'],
+    live:()=> `${Math.round(batPct())} % · ${!S.swOn?'interruptor apagado':!S.on?'pilas agotadas: la placa está apagada':'encendida, descargándose'}`},
   dashboard:{name:'Dashboard de monitoreo', role:'La ventana',
     what:'Una página web donde llegan los datos que envía la placa por Wi-Fi.',
     does:'Muestra la humedad, cuándo se regó y cuánta agua se usó. Cualquiera puede ver el estado del huerto desde un celular. Está más abajo, en grande.',
@@ -97,7 +108,7 @@ const PARTS = {
     live:()=> `Humedad ${Math.round(S.m)} % · ${stateWord(S.m)}`}
 };
 const ORDER = ['planta','sensor','placa','rele','bomba','deposito','manguera','fuente','dashboard'];
-const SHORT = {planta:'Planta',sensor:'Sensor',placa:'Placa',rele:'Relé',bomba:'Bomba',deposito:'Depósito',manguera:'Manguera',fuente:'Fuente',dashboard:'Dashboard'};
+const SHORT = {planta:'Planta',sensor:'Sensor',placa:'Placa',rele:'Relé',bomba:'Bomba',deposito:'Depósito',manguera:'Manguera',fuente:'Portapilas',dashboard:'Dashboard'};
 
 /* ---------- Números en los textos de la página ---------- */
 document.querySelectorAll('[data-cfg]').forEach(e=>{ e.textContent=C[e.dataset.cfg]; });
@@ -119,12 +130,14 @@ const CODE = [
   ['void setup() {','','','Lo que está entre estas llaves { } se hace una sola vez, al enchufar la placa.'],
   ['  pinMode(RELE, OUTPUT);','','boot','Prepara el pin del relé para dar órdenes (salida).'],
   ['  conectarWiFi();','','boot','Se conecta a la red Wi-Fi.'],
+  ['  avisarInicio();','// «me encendí»','boot','Avisa al dashboard que la placa se encendió (o que se reinició después de quedarse sin energía).'],
   ['}'],
   [''],
   ['void loop() {','','','Lo que está entre estas llaves { } se repite para siempre, una vuelta tras otra.'],
   ['  int raw = analogRead(SENSOR);','// leer el sensor','measure','Lee el sensor y guarda el número (de 0 a 4095) en la cajita raw.'],
   ['  int hum = map(raw, SECO, MOJADO, 0, 100);','// pasar a %','measure',`Convierte ese número a porcentaje: ${C.SENSOR_SECO} → 0 % y ${C.SENSOR_MOJADO} → 100 %. Descarta los decimales.`],
   ['  hum = constrain(hum, 0, 100);','// ni menos de 0 ni más de 100','measure','Si la cuenta da menos de 0 lo deja en 0; si da más de 100, lo deja en 100.'],
+  ['  int bateria = leerBateria();','// % de batería','measure','Mide cuánta batería queda (con dos resistencias conectadas a otro pin) y la guarda en la cajita bateria.'],
   [`  if (raw > ${C.SENSOR_MAX_VALIDO} || raw < ${C.SENSOR_MIN_VALIDO}) {`,'// ¿sensor suelto?','decide',`«if» significa «si». ¿El número es imposible (más de ${C.SENSOR_MAX_VALIDO} o menos de ${C.SENSOR_MIN_VALIDO})? Pasa cuando el sensor está suelto. || significa «o».`],
   ['    alerta("Revisar sensor");','','a-sensor','Si es imposible: avisa «Revisar sensor» y no riega.'],
   ['  } else {','','','«else» significa «si no». Si la lectura es posible, sigue por aquí.'],
@@ -140,7 +153,7 @@ const CODE = [
   ['    }'],
   ['  }'],
   ['  pulsos = 0;','','report','Ya no está regando: la cajita pulsos vuelve a 0.'],
-  ['  enviarDashboard(hum);','// si hay Wi-Fi','report','Envía la humedad al dashboard. Si no hay Wi-Fi, la guarda para después.'],
+  ['  enviarDashboard(hum, bateria);','// si hay Wi-Fi','report','Envía la humedad y la batería al dashboard. Si no hay Wi-Fi, las guarda para después.'],
   [`  delay(${C.MIN_ENTRE_MEDIDAS*60000});`,`// esperar ${C.MIN_ENTRE_MEDIDAS} min`,'idle',`Espera ${miles(C.MIN_ENTRE_MEDIDAS*60000)} ms = ${C.MIN_ENTRE_MEDIDAS} minutos antes de volver a medir.`],
   ['}']
 ];
@@ -171,10 +184,10 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape' && drawer.classList
 let fabShown='';
 function renderFab(){
   const act=codeLines.find(l=>l.classList.contains('badl')) || codeLines.find(l=>l.classList.contains('on'));
-  const txt=act?act.dataset.code:'';
+  const txt=act?act.dataset.code:(S.phase==='off'?'(sin energía)':'');
   if(txt===fabShown) return; fabShown=txt;
   $('fabLine').textContent=txt||'…';
-  $('fabEs').textContent=act&&act.dataset.es?act.dataset.es:'';
+  $('fabEs').textContent=act&&act.dataset.es?act.dataset.es:(S.phase==='off'?'La placa está apagada: no ejecuta nada.':'');
   fab.classList.toggle('alert',!!act && act.classList.contains('badl'));
   // mantener visible la línea resaltada dentro del panel
   if(act && drawer.classList.contains('open')){
@@ -189,9 +202,27 @@ let S, D, TR, paused=false, stepMode=false, speed=1, selected='sensor';
 function fresh(){
   return {m:26,pending:0,level:1200,used:0,waste:0,regando:false,pulses:0,phase:'boot',t:0,clock:7*60,day:0,
     raw:2558,hum:26,hasRead:false,outbox:[],cur:null,riegoId:0,pumpStart:0,alarm:null,next:'report',pumpOn:false,
-    wifi:true,sensorOk:true,hoseLoose:false,decText:'',spin:0,flow:0};
+    wifi:true,sensorOk:true,hoseLoose:false,decText:'',spin:0,flow:0,
+    batMah:C.BATERIA_MAH*C.BATERIA_INICIAL/100,swOn:true,on:true,offReason:''};
 }
-function freshDash(){ return {points:[],riegos:new Map(),lastC:null,lastHum:null,bomba:false,alert:null,recv:0,ver:0}; }
+function freshDash(){ return {points:[],riegos:new Map(),lastC:null,lastHum:null,bomba:false,alert:null,bat:null,recv:0,ver:0}; }
+
+/* ---------- Energía: portapilas con interruptor ---------- */
+function batPct(){ return S.batMah/C.BATERIA_MAH*100; }
+function powerOff(motivo){
+  S.on=false; S.offReason=motivo; S.pumpOn=false; S.flow=0;
+  if(S.outbox.length) log(`Al apagarse, la placa pierde ${S.outbox.length} dato(s) que tenía guardados sin enviar`,true);
+  S.outbox=[]; S.cur=null;
+  log(motivo==='switch'?'Se apaga el interruptor del portapilas: la placa se apaga':'Las pilas se agotaron: la placa se apaga sola',true);
+  enter('off');
+}
+function powerOn(){
+  S.on=true; S.offReason='';
+  // al volver la energía la placa empieza de cero: olvida lo que tenía en sus cajitas
+  S.regando=false; S.pulses=0; S.hasRead=false; S.alarm=null;
+  log('Vuelve la energía: el programa empieza otra vez desde setup()');
+  enter('boot');
+}
 function freshTrace(){ return {rows:[],ver:0}; }
 const PH = {
   boot:{title:'Arranque',dur:3.2,step:1,hot:['fuente','placa']},
@@ -201,7 +232,8 @@ const PH = {
   soak:{title:'Esperar',dur:3.2,step:4,hot:['planta','sensor']},
   alarm:{title:'Alerta',dur:4,step:3,hot:[]},
   report:{title:'Reportar',dur:2.6,step:5,hot:['placa','dashboard']},
-  idle:{title:`Pasa ${C.MIN_ENTRE_MEDIDAS===60?'1 hora':C.MIN_ENTRE_MEDIDAS+' min'}`,dur:3.6,step:0,hot:['planta']}
+  idle:{title:`Pasa ${C.MIN_ENTRE_MEDIDAS===60?'1 hora':C.MIN_ENTRE_MEDIDAS+' min'}`,dur:3.6,step:0,hot:['planta']},
+  off:{title:'Placa apagada',dur:3.6,step:0,hot:['fuente']}
 };
 
 function fmt(c){ const m=Math.floor(c)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
@@ -258,13 +290,15 @@ function receive(m){
   }
   if(m.k==='bomba') D.bomba=true; else D.bomba=false;
   if(m.r) D.riegos.set(m.r.id,m.r);
-  if(m.k==='lectura') D.alert=m.alerta?{c:m.c,tipo:m.alerta}:null;
+  if(m.k==='lectura'){ D.alert=m.alerta?{c:m.c,tipo:m.alerta}:null; D.bat=m.bat; }
+  // la placa avisa que (re)arrancó: un riego que quedó a medias se cortó por falta de energía
+  if(m.k==='inicio') D.riegos.forEach(r=>{ if(!r.fin) r.fin='corte'; });
   const keep=Math.floor(S.clock/1440)*1440-1440;
   while(D.points.length && D.points[0].c<keep) D.points.shift();
   D.riegos.forEach((r,id)=>{ if(r.c<keep) D.riegos.delete(id); });
 }
 function report(){
-  send({k:'lectura',c:S.clock,hum:S.sensorOk?S.hum:null,alerta:S.alarm});
+  send({k:'lectura',c:S.clock,hum:S.sensorOk?S.hum:null,alerta:S.alarm,bat:Math.round(batPct())});
   S.pulses=0;
 }
 
@@ -325,7 +359,7 @@ function enter(ph){
     log(!S.sensorOk?'Envía el aviso “Revisar sensor”':S.wifi?`Envía ${S.hum} % al dashboard`:`Sin Wi-Fi: guarda ${S.hum} % para enviarlo después`);
     const r=trRow(); if(r){ r.envio=S.wifi?'dato enviado al dashboard':'sin Wi-Fi: dato guardado'; TR.ver++; }
   }
-  if(ph==='boot'){ log('Se enciende la placa y se conecta al Wi-Fi'); }
+  if(ph==='boot'){ log('Se enciende la placa y se conecta al Wi-Fi'); send({k:'inicio',c:S.clock}); }
   if(stepMode){ paused=true; syncPlay(); }
 }
 function nextPhase(){
@@ -337,11 +371,12 @@ function nextPhase(){
   if(p==='soak') return 'measure';
   if(p==='alarm') return 'report';
   if(p==='report') return 'idle';
+  if(p==='off') return 'off';
   return 'measure';
 }
 
 function update(dt){
-  const ph=PH[S.phase];
+  const ph=PH[S.phase], c0=S.clock;
   S.t+=dt;
   S.pumpOn = S.phase==='pump';
   if(S.pumpOn){
@@ -355,8 +390,14 @@ function update(dt){
   // el agua se va absorbiendo
   const tr=S.pending*(1-Math.exp(-dt*0.85)); S.pending-=tr; S.m+=tr/C.ML_POR_PORCIENTO;
   if(S.phase==='idle'){ S.m-=dt*(C.SECADO_POR_HORA*C.MIN_ENTRE_MEDIDAS/60)/ph.dur; S.clock+=dt*C.MIN_ENTRE_MEDIDAS/ph.dur; }
+  if(S.phase==='off'){ S.m-=dt*C.SECADO_POR_HORA/ph.dur; S.clock+=dt*60/ph.dur; }   // apagada: pasa 1 hora, la tierra se sigue secando
   if(S.phase==='soak'){ S.clock+=dt*C.MIN_ESPERA/ph.dur; S.m-=dt*0.05; }
   S.m=Math.max(0,Math.min(100,S.m));
+  // energía: la placa y la bomba gastan las pilas (solo cuando el interruptor está prendido)
+  const horas=(S.clock-c0)/60;
+  const gasto=(S.on?C.CONSUMO_PLACA_MA:0)+(S.pumpOn?C.CONSUMO_BOMBA_MA:0);
+  S.batMah=Math.max(0,S.batMah-gasto*horas);
+  if(S.on && batPct()<=C.BATERIA_APAGA){ powerOff('empty'); return; }
   const day=Math.floor(S.clock/1440);
   if(day!==S.day){ S.day=day; log('Medianoche: empieza un día nuevo y el dashboard cuenta desde cero'); }
   if(S.t>=ph.dur) enter(nextPhase());
@@ -382,7 +423,10 @@ let flowOff=0, lastNarr='';
 function narration(){
   const h=S.hum, a=S.alarm;
   switch(S.phase){
-    case 'boot': return 'Se enchufa la fuente de 5 V. La placa ESP32 se enciende, prepara el pin del relé y se conecta al Wi-Fi.';
+    case 'boot': return 'Se prende el interruptor del portapilas. La placa ESP32 se enciende, prepara el pin del relé y se conecta al Wi-Fi.';
+    case 'off': return S.offReason==='switch'
+      ? 'El interruptor del portapilas está apagado. La placa no funciona: no mide, no riega y no envía datos. La tierra se sigue secando.'
+      : 'Las pilas se agotaron y la placa se apagó sola. Hay que poner pilas nuevas (o cargadas): entonces la placa vuelve a encenderse y empieza de nuevo desde el principio. A escala real, un panel solar las recargaría solo.';
     case 'measure': return S.sensorOk ? `La placa lee el sensor: valor crudo ${S.raw}, que equivale a ${h} % de humedad.` : 'La placa lee el sensor, pero recibe 4095: el máximo posible. Eso no es una medida real.';
     case 'decide': return S.decText || 'La placa compara la humedad con los límites.';
     case 'pump': return S.hoseLoose ? 'La placa activa el relé y la bomba empuja agua… pero la manguera está suelta: el agua cae en la mesa y la tierra sigue seca.' :
@@ -465,7 +509,8 @@ setCalcRaw(2572);
 const TUNE=[['UMBRAL_RIEGO','Empieza a regar bajo','%',1,99,1],['UMBRAL_PARADA','Deja de regar en','%',2,100,1],
   ['SEG_PULSO','Segundos por pulso','s',1,30,1],['ML_PULSO','Agua por pulso','ml',5,1000,5],
   ['SENSOR_SECO','Sensor en tierra seca (0 %)','',901,3599,1],['SENSOR_MOJADO','Sensor en tierra empapada (100 %)','',901,3599,1],
-  ['SECADO_POR_HORA','Cuánto se seca por hora (simulación)','%',0.5,20,0.5]];
+  ['SECADO_POR_HORA','Cuánto se seca por hora (simulación)','%',0.5,20,0.5],
+  ['BATERIA_MAH','Capacidad de la batería','mAh',200,30000,100]];
 $('tuneGrid').innerHTML=TUNE.map(([k,lab,u,mn,mx,st])=>`<label class="tune-f"><span>${lab}</span>
   <span class="tin"><input type="number" id="t-${k}" value="${C[k]}" min="${mn}" max="${mx}" step="${st}" inputmode="decimal">${u?`<i>${u}</i>`:''}</span>
   <small>ejemplo: ${miles(EJEMPLO[k])}${u?' '+u:''}</small></label>`).join('');
@@ -486,7 +531,11 @@ if(Object.keys(CUSTOM).length){
 function explain(){
   const r=trRow(), h=S.hum, U=C.UMBRAL_RIEGO, P=C.UMBRAL_PARADA;
   switch(S.phase){
-    case 'boot': return ['La placa se enciende. Deja listo el cable que da la orden al relé (el interruptor de la bomba) y se conecta al Wi-Fi.','Todavía no midió nada: la tabla empieza vacía.'];
+    case 'boot': return ['La placa se enciende. Deja listo el cable que da la orden al relé (el interruptor de la bomba) y se conecta al Wi-Fi.',
+      TR.rows.length ? `Empezó de cero: las cajitas vuelven a sus valores iniciales (${v('regando')} = no, ${v('pulsos')} = 0).` : 'Todavía no midió nada: la tabla empieza vacía.'];
+    case 'off': return ['La placa no tiene energía: no ejecuta ninguna línea del programa.',
+      S.offReason==='switch' ? 'Se apagó con el interruptor del portapilas.' : `Las pilas bajaron a ${C.BATERIA_APAGA} %: la placa se apagó sola. Hay que poner pilas nuevas.`,
+      `Cuando vuelva la energía, el programa empieza otra vez desde setup(). La placa «olvida» lo que tenía en sus cajitas: ${v('regando')} vuelve a «no» y ${v('pulsos')} a 0.`];
     case 'measure':
       if(!S.sensorOk) return ['Se escribe una fila nueva. La placa lee el sensor y recibe <b>4095</b>: el número más alto posible.','Eso no es una medida real. Lo más probable es que el cable del sensor esté suelto.'];
       {
@@ -568,7 +617,7 @@ function renderTrace(){
     $('exList').innerHTML=ex.map(t=>`<li>${t}</li>`).join('');
     $('exHead').textContent=`${clockStr()} · ${PH[S.phase].title}`;
   }
-  $('explain').classList.toggle('alert',S.phase==='alarm');
+  $('explain').classList.toggle('alert',S.phase==='alarm'||S.phase==='off');
   // cajitas de la memoria
   const vals = S.hasRead ? {raw:S.sensorOk?S.raw:'4095 (!)',hum:S.sensorOk?S.hum+' %':'—',regando:S.regando?'sí':'no',pulsos:S.pulses}
                          : {raw:'—',hum:'—',regando:S.regando?'sí':'no',pulsos:S.pulses};
@@ -587,7 +636,7 @@ let dashKey='', chartPts=[], chartGeo=null;
 function todayStart(){ return Math.floor(S.clock/1440)*1440; }
 function renderDash(){
   const W=Math.round(chart.getBoundingClientRect().width)||600;
-  const key=[D.ver,S.wifi,S.outbox.length,Math.floor(S.clock/5),W].join('|');
+  const key=[D.ver,S.wifi,S.on,S.outbox.length,Math.floor(S.clock/5),W].join('|');
   if(key===dashKey) return; dashKey=key;
   const t0=todayStart();
   const riegos=[...D.riegos.values()].filter(r=>r.c>=t0).sort((a,b)=>a.c-b.c);
@@ -595,12 +644,20 @@ function renderDash(){
   const enCurso=riegos.some(r=>!r.fin);
   // conexión
   const conn=$('dConn');
-  conn.textContent = !S.wifi ? 'Sin conexión' : S.outbox.length ? 'Poniéndose al día…' : 'En línea';
-  conn.className='conn '+(!S.wifi?'off':'on');
-  const off=$('dOffline'); off.hidden=S.wifi;
-  if(!S.wifi) off.textContent = `Sin conexión desde las ${D.lastC!=null?fmt(D.lastC):'--:--'}. Lo que ves es el último dato que llegó. La placa sigue midiendo y regando, y guarda ${S.outbox.length} dato(s) para enviarlos cuando vuelva el Wi-Fi.`;
-  const al=$('dAlert'); al.hidden=!D.alert;
-  if(D.alert) al.textContent = `Aviso de las ${fmt(D.alert.c)}: `+({sensor:'revisar el sensor (lectura imposible).',agua:'rellenar el depósito.',max:`${C.MAX_PULSOS} pulsos sin que suba la humedad: revisar la manguera y el sensor.`}[D.alert.tipo]);
+  const online=S.wifi&&S.on;
+  conn.textContent = !online ? 'Sin conexión' : S.outbox.length ? 'Poniéndose al día…' : 'En línea';
+  conn.className='conn '+(!online?'off':'on');
+  const off=$('dOffline'); off.hidden=online;
+  const desde=D.lastC!=null?fmt(D.lastC):'--:--';
+  if(!S.on) off.textContent = `No llegan datos desde las ${desde}. Desde el dashboard no se sabe por qué: puede ser el Wi-Fi o la energía. → Curso de turno: ir a revisar el prototipo (¿batería apagada o agotada?).`;
+  else if(!S.wifi) off.textContent = `Sin conexión desde las ${desde}. Lo que ves es el último dato que llegó. La placa sigue midiendo y regando, y guarda ${S.outbox.length} dato(s) para enviarlos cuando vuelva el Wi-Fi.`;
+  // avisos, con lo que tiene que hacer el curso de turno
+  const avisos=[];
+  if(D.alert) avisos.push(`Aviso de las ${fmt(D.alert.c)}: `+({sensor:'lectura imposible. → Curso de turno: ver que el sensor esté bien enterrado y el cable conectado.',
+    agua:'el depósito está casi vacío. → Curso de turno: rellenarlo.',
+    max:`${C.MAX_PULSOS} pulsos sin que suba la humedad. → Curso de turno: revisar la manguera y el gotero.`}[D.alert.tipo]));
+  if(D.bat!=null && D.bat<C.BATERIA_BAJA) avisos.push(`Batería baja (${D.bat} %). → Curso de turno: cambiar o recargar las pilas.`);
+  const al=$('dAlert'); al.hidden=!avisos.length; al.textContent=avisos.join('  ·  ');
   // números grandes
   $('kRiegos').textContent=riegos.length;
   $('kRiegosSub').textContent = !riegos.length ? 'todavía no se regó hoy' : enCurso ? 'uno está en curso' : `${pulsos} pulso(s) en total`;
@@ -611,13 +668,15 @@ function renderDash(){
   $('sHumW').textContent = D.lastHum!=null ? stateWord(D.lastHum) : '';
   $('sPump').textContent = D.bomba?'Encendida':'Apagada';
   $('sPump').className = D.bomba?'st-on':'';
-  $('sWifi').textContent = S.wifi?'Conectado':'Sin conexión';
-  $('sWifi').className = S.wifi?'':'st-off';
+  $('sWifi').textContent = online?'Conectado':'Sin conexión';
+  $('sWifi').className = online?'':'st-off';
+  $('sBat').textContent = D.bat!=null ? D.bat+' %' : '--';
+  $('sBat').className = D.bat!=null && D.bat<C.BATERIA_BAJA ? 'st-off' : '';
   $('sLast').textContent = D.lastC!=null ? fmt(D.lastC) : '--';
-  $('dStatus').classList.toggle('stale',!S.wifi);
-  $('sNext').textContent=proximoRiego(riegos);
+  $('dStatus').classList.toggle('stale',!online);
+  $('sNext').textContent=online?proximoRiego(riegos):'sin datos nuevos';
   // tabla de riegos
-  const motivo={ok:`llegó a ${C.UMBRAL_PARADA} %`,agua:'paró: sin agua',max:`paró: ${C.MAX_PULSOS} pulsos`};
+  const motivo={ok:`llegó a ${C.UMBRAL_PARADA} %`,agua:'paró: sin agua',max:`paró: ${C.MAX_PULSOS} pulsos`,corte:'cortado: sin energía'};
   $('riegoBody').innerHTML = riegos.map((r,i)=>`<tr${r.fin?'':' class="now"'}>
       <td class="mono" data-l="Riego">${i+1}</td><td class="mono" data-l="Hora">${fmt(r.c)}</td><td class="mono" data-l="Pulsos">${r.pulsos}</td>
       <td class="mono" data-l="Agua"><b>${Math.round(r.ml)} ml</b></td><td class="mono" data-l="Humedad antes">${r.antes} %</td>
@@ -656,7 +715,7 @@ function drawChart(W,riegos,t0){
   for(let m=0;m<=1440;m+=step){ s+=`<text class="c-ax" x="${X(t0+m)}" y="${H-8}" text-anchor="${m===0?'start':m===1440?'end':'middle'}">${String(m/60).padStart(2,'0')}:00</text>`; }
   // franja sin conexión
   const now=S.clock;
-  if(!S.wifi && D.lastC!=null){ const a=X(Math.max(t0,D.lastC)), b=X(now);
+  if(!(S.wifi&&S.on) && D.lastC!=null){ const a=X(Math.max(t0,D.lastC)), b=X(now);
     if(b>a+1) s+=`<rect class="c-off" x="${a}" y="${Tp}" width="${b-a}" height="${ph}"/>`+(b-a>70?`<text class="c-offt" x="${(a+b)/2}" y="${Tp+14}" text-anchor="middle">sin conexión</text>`:''); }
   // riegos: línea vertical + gota
   riegos.forEach(r=>{ const x=X(r.c);
@@ -712,7 +771,15 @@ function render(){
   $('led-rele').setAttribute('fill',S.pumpOn?'#ff3b3b':'#4a1d1d');
   $('rele-lever').setAttribute('y2',S.pumpOn?'212':'200');
   $('impeller').setAttribute('transform',`translate(737 475) rotate(${(S.spin%360).toFixed(0)})`);
-  const blink = S.phase==='boot' ? (Math.floor(S.t*6)%2) : 1;
+  const blink = !S.on ? 0 : S.phase==='boot' ? (Math.floor(S.t*6)%2) : 1;
+  // energía: batería, interruptor, sol y panel
+  const bp=batPct();
+  $('bat-fill').setAttribute('width',(52*bp/100).toFixed(1));
+  $('bat-fill').setAttribute('fill',bp<C.BATERIA_BAJA?'#e5533d':bp<50?'#e2a64a':'#4caf50');
+  $('batLbl').textContent=Math.round(bp)+'%';
+  $('bat-sw').setAttribute('y',S.swOn?'339':'357');
+  $('bat-sw').setAttribute('fill',S.swOn?'#7ee08a':'#e5533d');
+  $('batState').textContent=!S.swOn?'interruptor apagado':!S.on?'pilas agotadas':'encendida';
   $('led-board').setAttribute('fill',blink?'#4dff7a':'#2b4b30');
   // agua en la manguera
   if(S.flow && !reduce){ flowOff-=2.2*speed; }
@@ -726,7 +793,7 @@ function render(){
   $('goteroLbl').textContent = S.hoseLoose?'manguera suelta':'gotero';
   // wifi
   $('wifi-x').setAttribute('opacity',S.wifi?'0':'1');
-  $('wifi-waves').setAttribute('opacity',S.wifi?(S.phase==='report'?(.5+.5*Math.sin(performance.now()/90)).toFixed(2):'.8'):'.2');
+  $('wifi-waves').setAttribute('opacity',S.wifi&&S.on?(S.phase==='report'?(.5+.5*Math.sin(performance.now()/90)).toFixed(2):'.8'):'.2');
   // punto de señal
   const d=$('dot'); d.setAttribute('opacity',0);
   const pr=S.t/PH[S.phase].dur;
@@ -759,7 +826,7 @@ function render(){
   // narración
   const n=narration();
   if(n!==lastNarr){ $('narrText').textContent=n; lastNarr=n; }
-  $('narr').classList.toggle('alert',S.phase==='alarm' || (S.phase==='pump'&&(S.hoseLoose||S.level<=0)));
+  $('narr').classList.toggle('alert',S.phase==='alarm' || S.phase==='off' || (S.phase==='pump'&&(S.hoseLoose||S.level<=0)));
   $('narrChip').textContent = clockStr()+' · '+PH[S.phase].title;
   // lecturas
   $('rHum').textContent=Math.round(m)+' %';
@@ -775,6 +842,8 @@ function render(){
   $('rWifi').textContent=S.wifi?'Conectado':'Cortado';
   $('rWifi').style.color=S.wifi?'':'var(--alert)';
   $('rClock').textContent=clockStr();
+  $('rBat').textContent=`${Math.round(bp)} % · ${$('batState').textContent}`;
+  $('rBat').style.color=(!S.on||bp<C.BATERIA_BAJA)?'var(--alert)':'';
   $('rTank').style.width=(lv*100).toFixed(1)+'%';
   $('dLive').textContent='Ahora: '+PARTS[selected].live();
   renderDash();
@@ -811,7 +880,19 @@ $('btnPlay').onclick=()=>{ paused=!paused; syncPlay(); };
 $('btnStep').onclick=()=>{ stepMode=!stepMode; $('btnStep').setAttribute('aria-pressed',stepMode); if(!stepMode){paused=false;} syncPlay(); };
 $('btnNext').onclick=()=>{ paused=false; syncPlay(); };
 document.querySelectorAll('.controls .seg button').forEach(b=>b.onclick=()=>{ speed=+b.dataset.sp; document.querySelectorAll('.controls .seg button').forEach(x=>x.classList.toggle('on',x===b)); });
-function resetTests(){ ['tWifi','tSensor','tTank','tHose'].forEach(id=>$(id).setAttribute('aria-pressed','false')); $('tWifi').textContent='Cortar Wi-Fi'; $('tSensor').textContent='Desconectar sensor'; $('tTank').textContent='Vaciar depósito'; $('tHose').textContent='Soltar manguera'; }
+function resetTests(){ ['tWifi','tSensor','tTank','tHose','tBat'].forEach(id=>$(id).setAttribute('aria-pressed','false')); $('tWifi').textContent='Cortar Wi-Fi'; $('tSensor').textContent='Desconectar sensor'; $('tTank').textContent='Vaciar depósito'; $('tHose').textContent='Soltar manguera'; syncBatBtn(); }
+function syncBatBtn(){ $('tBat').textContent=S.swOn?'Apagar batería':'Prender batería'; $('tBat').setAttribute('aria-pressed',!S.swOn); }
+$('tBat').onclick=()=>{
+  if(S.swOn){ S.swOn=false; if(S.on) powerOff('switch'); else S.offReason='switch'; }
+  else { S.swOn=true;
+    if(batPct()>C.BATERIA_APAGA) powerOn();
+    else { S.offReason='empty'; log('Se prende el interruptor, pero las pilas están agotadas: hay que poner pilas nuevas',true); } }
+  syncBatBtn();
+};
+$('tPilas').onclick=()=>{
+  S.batMah=C.BATERIA_MAH; log('Se ponen pilas nuevas (100 %)');
+  if(S.swOn && !S.on) powerOn();
+};
 $('btnReset').onclick=()=>{ S=fresh(); D=freshDash(); TR=freshTrace(); varsPrev={}; $('log').innerHTML=''; resetTests(); enter('boot'); if(!stepMode) paused=false; syncPlay(); };
 $('tDry').onclick=()=>{ S.m=Math.max(0,S.m-15); log('Sol fuerte: la tierra se seca 15 %'); };
 $('tHand').onclick=()=>{ S.pending+=90; log('Alguien riega a mano (90 ml)'); };
@@ -819,6 +900,28 @@ $('tWifi').onclick=()=>{ S.wifi=!S.wifi; $('tWifi').setAttribute('aria-pressed',
 $('tSensor').onclick=()=>{ S.sensorOk=!S.sensorOk; $('tSensor').setAttribute('aria-pressed',!S.sensorOk); $('tSensor').textContent=S.sensorOk?'Desconectar sensor':'Reconectar sensor'; log(S.sensorOk?'Sensor reconectado':'Se suelta el cable del sensor',!S.sensorOk); };
 $('tTank').onclick=()=>{ const empty=S.level>100; S.level=empty?40:C.DEPOSITO_ML; $('tTank').setAttribute('aria-pressed',empty); $('tTank').textContent=empty?'Rellenar depósito':'Vaciar depósito'; log(empty?'El depósito casi se vacía':`Depósito relleno (${C.DEPOSITO_ML} ml)`,empty); };
 $('tHose').onclick=()=>{ S.hoseLoose=!S.hoseLoose; $('tHose').setAttribute('aria-pressed',S.hoseLoose); $('tHose').textContent=S.hoseLoose?'Arreglar manguera':'Soltar manguera'; log(S.hoseLoose?'Se suelta la manguera':'Manguera arreglada',S.hoseLoose); };
+
+/* ---------- QR a pantalla completa (botón «QR» debajo del dibujo) ---------- */
+// Los 4 primeros abren las sorpresas de la carpeta qr/; el último abre este simulador.
+const QRS=['qr/1.html','qr/2.html','qr/3.html','qr/4.html',''];
+let qrI=0;
+function qrShow(){
+  const url=QRS[qrI] ? new URL(QRS[qrI],location.href).href : location.origin+location.pathname;
+  $('qrBig').innerHTML=QR.svg(url,{label:'Código QR '+(qrI+1)});
+  $('qrN').textContent=`${qrI+1} / ${QRS.length}`;
+  $('qrPrev').disabled=qrI===0; $('qrNext').disabled=qrI===QRS.length-1;
+}
+function qrToggle(open){ $('qrFull').hidden=!open; document.body.classList.toggle('qr-open',open);
+  if(open){ qrShow(); $('qrNext').focus({preventScroll:true}); } else $('qrOpen').focus({preventScroll:true}); }
+$('qrLocal').hidden=location.protocol!=='file:';
+$('qrOpen').onclick=()=>qrToggle(true);
+$('qrClose').onclick=()=>qrToggle(false);
+$('qrPrev').onclick=()=>{ if(qrI>0){ qrI--; qrShow(); } };
+$('qrNext').onclick=()=>{ if(qrI<QRS.length-1){ qrI++; qrShow(); } };
+document.addEventListener('keydown',e=>{ if($('qrFull').hidden) return;
+  if(e.key==='Escape') qrToggle(false);
+  if(e.key==='ArrowRight'||e.key===' '){ e.preventDefault(); $('qrNext').click(); }
+  if(e.key==='ArrowLeft'){ e.preventDefault(); $('qrPrev').click(); } });
 
 /* ---------- Bucle ---------- */
 S=fresh(); D=freshDash(); TR=freshTrace();
